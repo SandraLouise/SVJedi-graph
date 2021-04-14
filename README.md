@@ -12,7 +12,7 @@ Long-read mapping on graph with GraphAligner (v1.0.12).
 python3 extract_variant_data.py -v <vcf_input> -r <genome_ref_input> 
 ```
 
-**Output :** 
+**Output:** 
 
 * reference sequence for all SV regions in vcf input (`reference_subsequences.fa`)
 * converted SV positions on their region's reference sequence (`converted_variants.vcf`)
@@ -25,7 +25,7 @@ vg construct -r reference_subsequences.fa -v converted_variants.vcf -m 5000 -S -
 vg view --gfa variant_graph.vg > variant_graph.gfa
 ```
 
-**Output :** 
+**Output:** 
 
 * variant graph in vg (`variant_graph.vg`)
 * variant graph in gfa format (`variant_graph.gfa`)
@@ -36,7 +36,7 @@ vg view --gfa variant_graph.vg > variant_graph.gfa
 GraphAligner -g variant_graph.vg -f <long_read_input> -a aln.gaf -x vg > log.txt
 ```
 
-**Output :** 
+**Output:** 
 
 * alignment results in gaf format (`aln.gaf`)
 * log of GraphAligner run (`log.txt`)
@@ -44,10 +44,14 @@ GraphAligner -g variant_graph.vg -f <long_read_input> -a aln.gaf -x vg > log.txt
 ### 4. Alignment filtering
 
 ```
-python3 filter_aln.py -a aln.gaf -g variant_graph.gfa
+python3 filter_aln_<version>.py -a aln.gaf -g variant_graph.gfa
 ```
+**Version:**
 
-**Output :** 
+* _v3:_ describes alignment based on its coordinates on SV region, semi-globality filter considers "immediate SV region" (~ allele in SVJedi) as target full length
+* _v4:_ describes alignment based on its path and position on first and last node, semi-globality filter considers "full SV region" (full connex component) as target full length
+
+**Output:** 
 
 * dictionary of informative alignments on SVs in json format (`informative_aln.json`)
 
@@ -57,7 +61,7 @@ python3 filter_aln.py -a aln.gaf -g variant_graph.gfa
 python3 svjedi_genotype_prediction.py -d informative_aln.json -v <vcf_input>
 ```
 
-**Output :** 
+**Output:** 
 
 * vcf file with predicted genotype for reads (`genotype_results.txt`)
 
