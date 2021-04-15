@@ -101,7 +101,15 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                 
                 ### get LENGTH for INSERTION ###                    
                 elif svtype == 'INS': 
-                    in_length = len(in_type) 
+                    if in_type == "<INS>": #in_type does not contain INS sequence
+                        if "SVLEN=" in in_info:
+                            if in_info.split(';')[-1].startswith('SVLEN='):
+                                in_length = int(in_info.split("SVLEN=")[1])
+                            else:
+                                in_length = int(in_info.split("SVLEN=")[1].split(";")[0])
+
+                    else:
+                        in_length = len(in_type) 
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
                     in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV

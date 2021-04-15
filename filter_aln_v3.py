@@ -12,24 +12,42 @@ def main(args):
         description="---"
     )    
     parser.add_argument(
-        "-a", "--gaf", metavar="<align_file>", nargs=1, help="align file in gaf format", required=True
+        "-a", 
+        "--gaf", metavar="<align_file>", nargs=1, 
+        help="align file in gaf format", 
+        required=True
     )
     parser.add_argument(
-        "-g", "--gfa", metavar="<graph_file>", nargs=1, help="variant graph in gfa format", required=True
+        "-g", 
+        "--gfa", metavar="<graph_file>", nargs=1, 
+        help="variant graph in gfa format", 
+        required=True
     )
 
     parser.add_argument(
-        "-n", "--sv_nodes", metavar="<sv_node_dict>", nargs=1, help="sv nodes info", required=False
+        "-n", 
+        "--sv_nodes", metavar="<sv_node_dict>", nargs=1, 
+        help="sv nodes info", 
+        required=False
     )
 
     parser.add_argument(
-        "-L", "--ladj", metavar="<len_adjacent_seq>", nargs=1, required=False, default=5000
+        "-L", 
+        "--ladj", metavar="<len_adjacent_seq>", nargs=1, 
+        required=False, 
+        default=5000
     )
     parser.add_argument(
-        "-O", "--dover", metavar="<min_breakpoint_overlap>", nargs=1, required=False, default=100
+        "-O", 
+        "--dover", metavar="<min_breakpoint_overlap>", nargs=1, 
+        required=False, 
+        default=100
     )
     parser.add_argument(
-        "-E", "--dend", metavar="<max_dist_semiglobal>", nargs=1, required=False, default=100
+        "-E", 
+        "--dend", metavar="<max_dist_semiglobal>", nargs=1, 
+        required=False, 
+        default=100
     )
 
     parser.add_argument(
@@ -63,7 +81,7 @@ def main(args):
         pass #don't recreate dict (real time save or not?)
 
     dict_of_sv_nodes = dict()
-    #dict = {sv_id : [[sv region nodes], [sv nodes]]}
+    #dict = {sv_id : [[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node]]}
     dict_of_nodes_len = dict()
     #dict = {node_id : node_len}
     
@@ -211,7 +229,7 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
     aln_nodes = extract_nodes(path, ordered=True) ## , strand
     if aln_nodes is None: #pb in path orientation
         return []
-    elif len(aln_nodes) == 1: #aln on only 1 node can't overlap breakpt
+    elif len(aln_nodes) == 1: #aln on only 1 node can't pass breakpt overap filter
         return []
 
     #Get list of sv the read mapped on
@@ -225,10 +243,10 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
     for sv_id in target_svs:
         sv_type = sv_id.split("_")[0]
 
-        #DELETIONS
-        if sv_type == 'DEL':
-            allele = find_DEL_allele(aln_nodes, sv_id, sv_dict)
-            a_len, a_start, a_end = get_aln_pos_on_allele_DEL(sv_id, allele, aln_nodes, int(p_start), int(p_end), sv_dict, nodes_len_dict)
+        #DELETIONS, INSERTIONS
+        if sv_type in ["DEL", "INS"]:
+            allele = find_DEL_INS_allele(aln_nodes, sv_id, sv_dict, sv_type)
+            a_len, a_start, a_end = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, int(p_start), int(p_end), sv_dict, nodes_len_dict)
 
         sv_id = "_".join(sv_id.split("_")[1:]) #remove sv type in sv id
         sv_based_alns.append([read, int(r_len), int(r_start), int(r_end), strand, sv_id, allele, a_len, a_start, a_end, identity])
@@ -241,40 +259,48 @@ def find_sv(aln_nodes, sv_dict):
     """
     target_sv = set()
     for sv in sv_dict:
-        if aln_nodes[1] in sv_dict[sv][0]:
-            target_sv.add(sv)
+        for i in range(1, len(aln_nodes), 2): #only search matching sv for every second node of aln path
+            if aln_nodes[i] in sv_dict[sv][0]:
+                target_sv.add(sv)
     return list(target_sv)
 
-def find_DEL_allele(nodes, sv, sv_dict):
-    #Look for ref specific nodes in aln nodes
-    for ref_specific_node in sv_dict[sv][1]: #sv nodes = ref specific nodes
-        if ref_specific_node in nodes:
+def find_DEL_INS_allele(aln_nodes, sv, sv_dict, sv_type):
+    '''Works for DEL and INS types'''
+    #Look for sv specific nodes in aln nodes
+    for sv_node in sv_dict[sv][1]: #sv nodes = sv sequence nodes
+        if sv_node in aln_nodes:
+            if sv_type == "DEL":
+                return 0
+            elif sv_type == "INS":
+                return 1
+
+    #Look for sv flanking nodes succession in aln nodes
+    left_breakpt_node = str(int(sv_dict[sv][1][0]) - 1) #node preceeding first sv specific node
+    right_breakpt_node = str(int(sv_dict[sv][1][-1]) + 1) #node following last sv specific node
+    flanking_nodes_succession = "-".join([left_breakpt_node, right_breakpt_node])
+    aln_node_succession = "-".join(list(map(str, aln_nodes)))
+
+    if flanking_nodes_succession in aln_node_succession:
+        if sv_type == "DEL":
+            return 1
+        elif sv_type == "INS":
             return 0
-
-    #Look for alt specific node succession in aln nodes
-    left_breakpt_node = str(int(sv_dict[sv][1][0]) - 1) #node preceeding first ref specific node
-    right_breakpt_node = str(int(sv_dict[sv][1][-1]) + 1) #node following last ref specific node
-    alt_path_node_succession = "-".join([left_breakpt_node, right_breakpt_node])
-    aln_node_succession = "-".join(list(map(str, nodes)))
-
-    if alt_path_node_succession in aln_node_succession:
-        return 1
     
     #Aln do not inform on sv allele
     return None
 
-def get_aln_pos_on_allele_DEL(sv, allele, aln_nodes, start, end, sv_dict, node_len_dict):
+def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, start, end, sv_dict, node_len_dict):
 
     if allele is None:
         return None, None, None
 
     a_pos_on_first_node = sv_dict[sv][2][0] #allele start on sv region's first node
     a_end_on_last_node = sv_dict[sv][2][1] #allele end on sv region's last node
-    a_len = 0 #allele length
     a_start = None #aln start on allele
     first_aln_node_on_allele = 0 #first aln node on allele
 
     while (a_start is None) and (first_aln_node_on_allele < len(aln_nodes)):
+        a_len = 0 #allele length
 
         for sv_node in sv_dict[sv][0]:
             #Look for aln start node
@@ -283,8 +309,11 @@ def get_aln_pos_on_allele_DEL(sv, allele, aln_nodes, start, end, sv_dict, node_l
                 a_end = a_len - a_pos_on_first_node + end - 1 #aln end on allele
 
             #Add nodes length to allele length
-            if (allele == 1) and (sv_node in sv_dict[sv][1]):
+            if (sv_type == "DEL") and (allele == 1) and (sv_node in sv_dict[sv][1]):
                 #Don't count ref nodes length in alt allele length
+                continue
+            elif (sv_type == "INS") and (allele == 0) and (sv_node in sv_dict[sv][1]):
+                #Don't count alt nodes length in ref allele length
                 continue
 
             else:
@@ -310,7 +339,7 @@ def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
         node_dict[sv_id] = [[], [], []] #[[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node]]
 
         #Get coordinates of sv and sv region
-        if sv_type == 'DEL':
+        if sv_type in ["DEL", "INS", "INV"]:
             region_start = int(pos) - first_sv_start #start of current sv REGION on graph
             sv_start = int(pos) - first_sv_start + l_adj #start of current sv on graph
             if int(length) <= 2 * l_adj:
@@ -318,14 +347,12 @@ def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
             else:
                 sv_end = sv_start + 2 * l_adj - 1 #end if sv sequence cut
             region_end = sv_end + l_adj #end of current sv REGION on graph
-        
-        # elif sv_type == 'ins':
 
-        #Get nodes of sv
+        #Get nodes of sv (works for DEL, INS, INV)
         pos_on_graph = 0
         for node in nodes:
 
-            #Find first node of sv
+            #Find first node of sv REGION
             if (pos_on_graph < region_start + 1) and (pos_on_graph + dict_of_nodes_len[node] > region_start): #node contains sv region start
                 node_dict[sv_id][0].append(node) #add node to sv region nodes
 
@@ -344,8 +371,8 @@ def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
 
                     pos_on_graph += dict_of_nodes_len[node]
                 
-                #Found all sv region nodes
-                region_end_on_node = region_end - (pos_on_graph - dict_of_nodes_len[node - 1]) #DEL, INS, INV
+                #Found all sv region nodes (exited while loop)
+                region_end_on_node = region_end - (pos_on_graph - dict_of_nodes_len[node - 1]) #works for DEL, INS, INV
                 node_dict[sv_id][2].append(region_end_on_node)
                 break
 
