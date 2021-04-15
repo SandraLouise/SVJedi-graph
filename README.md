@@ -17,7 +17,7 @@ python3 extract_variant_data_<version>.py -v <vcf_input> -r <genome_ref_input>
 * _v3:_ `region_id` = `"_".join(["ref", chrom,] + [sv(s)_id])` with `sv_id` = `"-".join([sv_type, pos_on_genome, sv_length])`
     * to be used with _v3_ of `filter_aln.py`
 
-* _v4:_ `region_id` = `"_".join(["ref", chrom,] + [sv(s)_id])` with `sv_id` = `"-".join([sv_type, pos_on_genome, end_on_genome])`
+* _v4:_ `region_id` = `"_".join(["ref", chrom,] + [sv(s)_id])` with `sv_id` = `"-".join([sv_type, pos_on_genome, end_on_graph])`
     * to be used with _v4_ of `filter_aln.py`
 
 **Output:** 
