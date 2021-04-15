@@ -1,3 +1,5 @@
+#v3
+
 Table of contingency:
 [[316  17   0   0]
  [  0 333   1   0]
