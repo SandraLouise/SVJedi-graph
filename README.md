@@ -4,7 +4,7 @@ Graph construction with VG toolkit (v?).
 
 Long-read mapping on graph with GraphAligner (v1.0.12).
 
-## Current workflow
+## Current pipeline
 
 ### 1. Variant data prep
 
