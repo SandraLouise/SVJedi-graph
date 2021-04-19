@@ -85,7 +85,7 @@ def main(args):
         newRef_file_name = 'reference_subsequences.fa'
         newVCF_file_name = 'converted_variants.vcf'
     
-    sv_min_dist = 5000
+    sv_min_dist = l_adj * 2
 
 
     #1. Get reference genome sequence
@@ -229,7 +229,7 @@ def main(args):
                     #Last close SV
                     if sv_id == dict_of_close_sv[chrom][first_close_sv][-1]:
                         #Get right flanking region and write ref seq and vcf lines
-                        right_flanking_region = get_sv_reference(dict_of_chrom, chrom, prev_end, prev_end + l_adj, l_adj, False)
+                        right_flanking_region = get_sv_reference(dict_of_chrom, chrom, end_on_chr, end_on_chr + l_adj, l_adj, False)
                         extended_refSeq = extended_refSeq + right_flanking_region
                         newRef_file.write('>' + region_id + "\n")
                         newRef_file.write(extended_refSeq + "\n")
