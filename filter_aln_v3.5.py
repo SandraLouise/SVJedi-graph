@@ -81,7 +81,7 @@ def main(args):
         pass #don't recreate dict (real time save or not?)
 
     dict_of_sv_nodes = dict()
-    #dict = {sv_id : [[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node]]}
+    #dict = {sv_id : [[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node], [first node of component, last node of component]]}
     dict_of_nodes_len = dict()
     #dict = {node_id : node_len}
     
@@ -130,7 +130,7 @@ def main(args):
             sv_based_alns = read_gaf_aln(aln, dict_of_sv_nodes, dict_of_nodes_len) #list of sv based aln(s) from graph-based aln
 
             for sv_based_aln in sv_based_alns:
-                read, r_len, r_start, r_end, strand, sv_id, allele, a_len, a_start, a_end, a_identity = sv_based_aln
+                read, r_len, r_start, r_end, strand, sv_id, allele, a_len, a_start, a_end, a_coords_for_semiglob, a_identity = sv_based_aln
 
                 ################## Tests
                 # if read not in aln_reads_before_filters:
@@ -147,7 +147,7 @@ def main(args):
                     
                     #Semi-globality filter
 
-                    if is_semiglobal_aln(r_len, r_start, r_end, a_len, a_start, a_end, d_end, l_adj):
+                    if is_semiglobal_aln(r_len, r_start, r_end, a_coords_for_semiglob, dict_of_sv_nodes["DEL_" + sv_id][3], d_end, dict_of_nodes_len):
 
                     #Ambiguous read alignment filter (remove redundant reads aligning on complementary ref)
 
@@ -203,12 +203,18 @@ def main(args):
 
 
 
-def is_semiglobal_aln(r_len, r_start, r_end, a_len, a_start, a_end, d_end, l_adj):
+def is_semiglobal_aln(r_len, r_start, r_end, a_coords_for_semiglob, list_component_first_last_node, d_end, nodes_len_dict):
 
-    return any([(a_start <= d_end) and (a_len - d_end <= a_end), #allele inside read
+    # a_coords_for_semiglob = [[a_start_node, a_start_on_node], [a_end_node, a_end_on_node]]
+    # list_component_first_last_node = [component first node, component last node]
+
+    global_on_component_left = (list_component_first_last_node[0] == a_coords_for_semiglob[0][0]) and (a_coords_for_semiglob[0][1] <= d_end)
+    global_on_component_right = (list_component_first_last_node[1] == a_coords_for_semiglob[1][0]) and (nodes_len_dict[a_coords_for_semiglob[1][0]] - d_end <= a_coords_for_semiglob[1][1])
+
+    return any([(global_on_component_left) and (global_on_component_right), #allele inside read
                 (r_start <= d_end) and (r_len - d_end <= r_end), #read inside allele
-                (r_start <= d_end) and (a_len - d_end <= a_end), #read left aligned
-                (a_start <= d_end) and (r_len - d_end <= r_end)]) #read right aligned
+                (r_start <= d_end) and (global_on_component_right), #read left aligned
+                (global_on_component_left) and (r_len - d_end <= r_end)]) #read right aligned
      
 def do_overlap_breakpoint(a_len, start, end, l_adj, d_over):
 
@@ -222,7 +228,7 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
     #Traduit l'alignement => path devient allele_svid ; p_len devient allele_len ; p_start devient allele_start ; p_end devient allele_end
     # => trouve le sv puis l'allèle puis convertis les positions
 
-    read, r_len, r_start, r_end, strand, path, __, p_start, p_end, *__ = gaf_line.rstrip().split("\t")
+    read, r_len, r_start, r_end, strand, path, p_len, p_start, p_end, *__ = gaf_line.rstrip().split("\t")
     identity = float(gaf_line.rstrip().split("\t")[14].split(":")[-1])
 
     #Get nodes of path
@@ -246,7 +252,7 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
         #DELETIONS, INSERTIONS
         if sv_type in ["DEL", "INS"]:
             allele = find_DEL_INS_allele(aln_nodes, sv_id, sv_dict, sv_type)
-            a_len, a_start, a_end = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, int(p_start), int(p_end), sv_dict, nodes_len_dict)
+            a_len, a_start, a_end, a_coords_for_semiglob = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, int(p_len), int(p_start), int(p_end), sv_dict, nodes_len_dict)
 
         #INVERSIONS
         if sv_type == "INV":
@@ -255,7 +261,7 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
             #POS ON ALLELE : same as DEL/INS but if aln starts/ends on sv node and allele 1
 
         sv_id = "_".join(sv_id.split("_")[1:]) #remove sv type in sv id
-        sv_based_alns.append([read, int(r_len), int(r_start), int(r_end), strand, sv_id, allele, a_len, a_start, a_end, identity])
+        sv_based_alns.append([read, int(r_len), int(r_start), int(r_end), strand, sv_id, allele, a_len, a_start, a_end, a_coords_for_semiglob, identity])
 
     return sv_based_alns
 
@@ -295,11 +301,12 @@ def find_DEL_INS_allele(aln_nodes, sv, sv_dict, sv_type):
     #Aln do not inform on sv allele
     return None
 
-def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, start, end, sv_dict, node_len_dict):
+def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, length, start, end, sv_dict, node_len_dict):
 
     if allele is None:
-        return None, None, None
+        return None, None, None, [None]
 
+    ##########
     a_pos_on_first_node = sv_dict[sv][2][0] #allele start on sv region's first node
     a_end_on_last_node = sv_dict[sv][2][1] #allele end on sv region's last node
     a_start = None #aln start on allele
@@ -330,8 +337,16 @@ def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, start, end, sv
                     a_len += node_len_dict[sv_node]
         
         first_aln_node_on_allele += 1
+        ##########
 
-    return a_len, a_start, a_end
+    if sv_type in ["DEL", "INS"]:
+        a_start_node = aln_nodes[0]
+        a_start_on_node = start
+
+        a_end_node = aln_nodes[-1]
+        a_end_on_node = length - end
+
+    return a_len, a_start, a_end, [[a_start_node, a_start_on_node], [a_end_node, a_end_on_node]]
 
 def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
     l_adj = 5000
@@ -342,7 +357,7 @@ def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
     for sv in range(1, sv_number + 1):
         sv_type, pos, length = sv_region.split('_')[1 + sv].split('-')
         sv_id = "_".join([sv_type, chrom, "-".join([pos, length])])
-        node_dict[sv_id] = [[], [], []] #[[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node]]
+        node_dict[sv_id] = [[], [], [], []] #[[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node], [component first node, component last node]]
 
         #Get coordinates of sv and sv region
         if sv_type in ["DEL", "INS", "INV"]:
@@ -383,6 +398,8 @@ def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
                 break
 
             pos_on_graph += dict_of_nodes_len[node]
+        
+        node_dict[sv_id][3] = [nodes[0], nodes[-1]]
     
     return node_dict
 
