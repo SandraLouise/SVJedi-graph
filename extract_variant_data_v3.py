@@ -200,12 +200,10 @@ def main(args):
                     found_close_sv = True
                     first_close_sv = sv_id
 
+                    start_first_close_sv = start_on_chr
+
                     #Get left flanking region + sv ref seq
                     region_id = '_'.join(['ref', chrom, '-'.join([sv_type, pos, str(length)])]) #= 'ref_' + chrom + '_' + sv_type + "-" + pos_sv_1 + '-' + len_sv_1 (ex: 'ref_1_DEL-88749-1400')
-                    left_flanking_region = get_sv_reference(dict_of_chrom, chrom, start_on_chr - l_adj, start_on_chr, l_adj, False) # !!!!!!!
-                    sv_refSeq = get_sv_reference(dict_of_chrom, chrom, start_on_chr, end_on_chr, l_adj, cut)
-                    extended_refSeq = left_flanking_region + sv_refSeq
-                    start_of_extended_refSeq = start_on_chr - l_adj
 
                     #Convert SV coordinates
                     converted_start = l_adj
@@ -220,18 +218,8 @@ def main(args):
                     #Get left flanking region + sv ref seq
                     region_id = '_'.join([region_id, '-'.join([sv_type, pos, str(length)])]) #ex: 'ref_1_DEL-88749-1400' + '_' + sv2_type + '-' + pos_sv_2 + '-' + len_sv_2
 
-                    if start_on_chr <= prev_end:
-                        #no flanking region after last sv and before current sv
-                        sv_refSeq = get_sv_reference(dict_of_chrom, chrom, prev_end, end_on_chr, l_adj, cut)
-                        extended_refSeq = extended_refSeq + sv_refSeq
-
-                    else:
-                        left_flanking_region = get_sv_reference(dict_of_chrom, chrom, prev_end, start_on_chr, l_adj, False)
-                        sv_refSeq = get_sv_reference(dict_of_chrom, chrom, start_on_chr, end_on_chr, l_adj, cut)
-                        extended_refSeq = extended_refSeq + left_flanking_region + sv_refSeq
-
                     #Convert SV coordinates
-                    converted_start = start_on_chr - start_of_extended_refSeq
+                    converted_start = start_on_chr - (start_first_close_sv - l_adj)
                     if sv_type == "DEL" or sv_type == "INV":
                         converted_end = converted_start + length
                     elif sv_type == 'INS':
@@ -240,11 +228,8 @@ def main(args):
                     
                     #Last close SV
                     if sv_id == dict_of_close_sv[chrom][first_close_sv][-1]:
-                        #Get right flanking region and write ref seq and vcf lines
-                        right_flanking_region = get_sv_reference(dict_of_chrom, chrom, end_on_chr, end_on_chr + l_adj, l_adj, False)
-                        extended_refSeq = extended_refSeq + right_flanking_region
                         newRef_file.write('>' + region_id + "\n")
-                        newRef_file.write(extended_refSeq + "\n")
+                        newRef_file.write(dict_of_chrom[chrom][start_first_close_sv - l_adj + 1 : end_on_chr + l_adj + 1] + "\n")
 
                         converted_vcf_lines = converted_vcf_lines.replace('region_id', region_id)
                         newVCF_file.write(converted_vcf_lines)
