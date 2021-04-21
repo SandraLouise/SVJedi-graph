@@ -63,9 +63,9 @@ def main(args):
         pass #load dict_of_DEL_sv_nodes from json
 
     if args.version:
-        output_aln_dict = 'informative_aln_' + args.version + '.json'
+        output_aln_dict = 'informative_aln_v3_' + args.version + '.json'
     else:
-        output_aln_dict = 'informative_aln.json'
+        output_aln_dict = 'informative_aln_v3.json'
 
     gfa_file = args.gfa[0]
     gaf_file = args.gaf[0]
