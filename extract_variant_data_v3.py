@@ -56,6 +56,13 @@ def main(args):
         metavar="<versionID", 
         type=str,
         required=False)
+    
+    parser.add_argument(
+        "-o", 
+        "--outputDir", 
+        metavar="<outputDirectory>", 
+        type=str,
+        required=False)
 
     args = parser.parse_args()
 
@@ -68,22 +75,27 @@ def main(args):
     else:
         cut = False
     
-    ########### Tests
-    # if args.number:
-    #     n = int(args.number[0])
-    
-    if args.expid and args.version:
-        newRef_file_name = args.expid + '_' + 'reference_subsequences' + '_' + args.version + '.fa'
-        newVCF_file_name = args.expid + '_' + 'converted_variants' + '_' + args.version + '.vcf'
-    
-    elif args.expid:
-        newRef_file_name = args.expid + '_' + 'reference_subsequences.fa'
-        newVCF_file_name = args.expid + '_' + 'converted_variants.vcf'
-    ###########
-    
+    if args.outputDir:
+        newRef_file_name = args.outputDir + '/reference_subsequences.fa'
+        newVCF_file_name = args.outputDir + '/converted_variants.vcf'
+
     else:
-        newRef_file_name = 'reference_subsequences.fa'
-        newVCF_file_name = 'converted_variants.vcf'
+        ########### Tests
+        # if args.number:
+        #     n = int(args.number[0])
+        
+        if args.expid and args.version:
+            newRef_file_name = args.expid + '_' + 'reference_subsequences' + '_' + args.version + '.fa'
+            newVCF_file_name = args.expid + '_' + 'converted_variants' + '_' + args.version + '.vcf'
+        
+        elif args.expid:
+            newRef_file_name = args.expid + '_' + 'reference_subsequences.fa'
+            newVCF_file_name = args.expid + '_' + 'converted_variants.vcf'
+        ###########
+        
+        else:
+            newRef_file_name = 'reference_subsequences.fa'
+            newVCF_file_name = 'converted_variants.vcf'
     
     sv_min_dist = l_adj * 2
 
