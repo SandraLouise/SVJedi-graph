@@ -229,7 +229,7 @@ def main(args):
                     #Last close SV
                     if sv_id == dict_of_close_sv[chrom][first_close_sv][-1]:
                         newRef_file.write('>' + region_id + "\n")
-                        newRef_file.write(dict_of_chrom[chrom][start_first_close_sv - l_adj + 1 : end_on_chr + l_adj + 1] + "\n")
+                        newRef_file.write(dict_of_chrom[chrom][start_first_close_sv - l_adj : end_on_chr + l_adj] + "\n")
 
                         converted_vcf_lines = converted_vcf_lines.replace('region_id', region_id)
                         newVCF_file.write(converted_vcf_lines)
@@ -248,7 +248,7 @@ def main(args):
 
                     newVCF_file.write(convert_sv(line, region_id, converted_start, converted_end, length, l_adj, cut))
                     newRef_file.write('>' + region_id + "\n")
-                    newRef_file.write(dict_of_chrom[chrom][start_on_chr - l_adj + 1 : end_on_chr + l_adj + 1] + "\n")
+                    newRef_file.write(dict_of_chrom[chrom][start_on_chr - l_adj : end_on_chr + l_adj] + "\n")
 
                 prev_end = end_on_chr 
 
