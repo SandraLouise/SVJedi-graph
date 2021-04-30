@@ -51,6 +51,13 @@ def main(args):
     )
 
     parser.add_argument(
+        "-o", 
+        "--output", 
+        metavar="<output>", 
+        nargs=1, 
+        help="output file")
+
+    parser.add_argument(
         "-v", 
         "--version", 
         metavar="<versionID", 
@@ -61,11 +68,14 @@ def main(args):
     
     if args.sv_nodes is not None:
         pass #load dict_of_DEL_sv_nodes from json
-
-    if args.version:
-        output_aln_dict = 'informative_aln_v3.5_' + args.version + '.json'
+    
+    if args.output:
+        output_aln_dict = args.output[0]
     else:
-        output_aln_dict = 'informative_aln_v3.5.json'
+        if args.version:
+            output_aln_dict = 'informative_aln_v3.5_' + args.version + '.json'
+        else:
+            output_aln_dict = 'informative_aln_v3.5.json'
 
     gfa_file = args.gfa[0]
     gaf_file = args.gaf[0]
@@ -237,6 +247,11 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
         return []
     elif len(aln_nodes) == 1: #aln on only 1 node can't pass breakpt overap filter
         return []
+    
+    #TODO: simplify read_gaf_aln() and associated functions
+
+    #Get orientation of path 
+    orient = check_global_path_orientation(path, aln_nodes)
 
     #Get list of sv the read mapped on
     target_svs = find_sv(aln_nodes, sv_dict)
@@ -252,7 +267,7 @@ def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
         #DELETIONS, INSERTIONS
         if sv_type in ["DEL", "INS"]:
             allele = find_DEL_INS_allele(aln_nodes, sv_id, sv_dict, sv_type)
-            a_len, a_start, a_end, a_coords_for_semiglob = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, int(p_len), int(p_start), int(p_end), sv_dict, nodes_len_dict)
+            a_len, a_start, a_end, a_coords_for_semiglob = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, orient, int(p_len), int(p_start), int(p_end), sv_dict, nodes_len_dict)
 
         #INVERSIONS
         if sv_type == "INV":
@@ -301,7 +316,7 @@ def find_DEL_INS_allele(aln_nodes, sv, sv_dict, sv_type):
     #Aln do not inform on sv allele
     return None
 
-def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, length, start, end, sv_dict, node_len_dict):
+def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, orient, p_len, start, end, sv_dict, node_len_dict):
 
     if allele is None:
         return None, None, None, [None]
@@ -341,10 +356,14 @@ def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, length, start,
 
     if sv_type in ["DEL", "INS"]:
         a_start_node = aln_nodes[0]
-        a_start_on_node = start
-
         a_end_node = aln_nodes[-1]
-        a_end_on_node = length - end
+
+        if orient == "f":
+            a_start_on_node = start
+            a_end_on_node = node_len_dict[a_end_node] - (p_len - end)
+        elif orient =="r":
+            a_start_on_node = (p_len - end) - 1
+            a_end_on_node = node_len_dict[a_end_node] - start
 
     return a_len, a_start, a_end, [[a_start_node, a_start_on_node], [a_end_node, a_end_on_node]]
 
