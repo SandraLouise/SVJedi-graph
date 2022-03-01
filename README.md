@@ -8,6 +8,12 @@ SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF f
 
 SVJedi-graph requires only python and GraphAligner to run.
 
+```bash
+...
+```
+
 ## Usage
 
-
+```bash
+...
+```
