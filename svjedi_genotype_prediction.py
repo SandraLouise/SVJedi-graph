@@ -22,6 +22,8 @@ def main(args):
     
     parser.add_argument("-o", "--output", metavar="<output>", nargs=1, help="output file")
 
+    parser.add_argument("-i", "--minid", metavar="<min identity>", nargs=1, type=float, help="minimum pct of identity")
+
     parser.add_argument("-ladj", metavar="<allele_size>", nargs=1, type=int, default=[5000], help="Sequence allele adjacencies at each side of the SV")
 
     parser.add_argument(
@@ -40,6 +42,11 @@ def main(args):
         output = "genotype_results.txt"
     else:
         output = args.output[0]
+    
+    if args.minid is not None:
+        min_id = args.minid[0]
+    else:
+        min_id = 0
 
     vcffile = args.vcf
     aln_dict_file = args.aln[0]
@@ -49,13 +56,18 @@ def main(args):
     with open(aln_dict_file, 'r') as file:
         dict_of_informative_aln = json.load(file)
 
+    missing_id = []
 
-    decision_vcf(dict_of_informative_aln, vcffile, output, min_support, l_adj)
+    missing_id = decision_vcf(dict_of_informative_aln, vcffile, output, min_support, min_id, l_adj, missing_id)
 
-def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
+    # print(len(missing_id))
+    # print(missing_id[:10])
+
+def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id, l_adj, missing_id):
     """ Output in VCF format and take genotype decision """
     getcontext().prec = 28
     outDecision = open(outputDecision, "w")
+
     with open(inputVCF) as inputFile:
         for line in inputFile:
             if line.startswith("##"):
@@ -70,6 +82,9 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
             else:
                 in_chrom, in_start, _, __, in_type, ___, ____, in_info, *_ = line.rstrip("\n").split("\t")
 
+                ### get END ###
+                end = line.split(";END=")[1].split(";")[0]
+
                 ### get SVTYPE ###
                 if 'SVTYPE' in in_info:
                     if in_info.split(';')[-1].startswith('SVTYPE='):
@@ -78,6 +93,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                         svtype = in_info.split('SVTYPE=')[1].split(';')[0]
                 else:
                     svtype = ''
+
                 
                 ### get LENGTH for DELETION ###                 
                 if svtype == 'DEL':
@@ -101,12 +117,11 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                 
                 ### get LENGTH for INSERTION ###                    
                 elif svtype == 'INS': 
-                    if in_type == "<INS>": #in_type does not contain INS sequence
-                        if "SVLEN=" in in_info:
-                            if in_info.split(';')[-1].startswith('SVLEN='):
-                                in_length = int(in_info.split("SVLEN=")[1])
-                            else:
-                                in_length = int(in_info.split("SVLEN=")[1].split(";")[0])
+                    if "SVLEN=" in in_info:
+                        if in_info.split(';')[-1].startswith('SVLEN='):
+                            in_length = int(in_info.split("SVLEN=")[1])
+                        else:
+                            in_length = int(in_info.split("SVLEN=")[1].split(";")[0])
 
                     else:
                         in_length = len(in_type) 
@@ -124,7 +139,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                     in_length = int(end) - int(in_start)
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
-                    in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    in_sv = in_chrom + "_" + in_start + "-" + str(end)
 
 
                 ### get sv id for TRANSLOCATION ###             
@@ -150,16 +166,49 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                 
                 #######################################################################################
                 #Asign genotype 
-                
+
+                in_sv = in_chrom + "_" + in_start + "-" + str(end)
                 if svtype in ('DEL', 'INS', 'INV', 'BND') and in_sv in list(dictReadAtJunction.keys()) and abs(in_length) >= 50:
-                    nbAln = [len(x) for x in dictReadAtJunction[in_sv]]
+
+                    #-------------------#
+                    #Sup. filter alns (to be moved to filter script later)
+                    allele_alns = [[], []]
+                    for a in [0, 1]:
+                        for aln in dictReadAtJunction[in_sv][a]:
+                            if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
+                                allele_alns[a].append(aln)
+                    #-------------------#
+
+                    nbAln = [len(x) for x in allele_alns]
                     genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
             
                 else: #if svtype different from DEL, INS, INV, BND or if sv not in supported by alignment
+
+                    if in_sv not in list(dictReadAtJunction.keys()):
+                        
+                        #Try find version pb###############################################################
+                        corr_in_sv = in_chrom + "_" + in_start + "-" + in_start
+                        if corr_in_sv in list(dictReadAtJunction.keys()):
+                            #-------------------#
+                            #Sup. filter alns (to be moved to filter script later)
+                            allele_alns = [[], []]
+                            for a in [0, 1]:
+                                for aln in dictReadAtJunction[corr_in_sv][a]:
+                                    if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
+                                        allele_alns[a].append(aln)
+                            #-------------------#
+
+                            nbAln = [len(x) for x in allele_alns]
+                            genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
+                        ###################################################################################
+
+                        else:
+                            missing_id.append(in_sv)
+
                     nbAln = [0,0]
                     genotype = "./."
                     proba = [".",".","."]
-                
+
                     
                 #######################################################################################
                 #Output genotype in VCF
@@ -199,6 +248,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, l_adj):
                     outDecision.write(new_line + "\n")
 
     outDecision.close()
+
+    return missing_id
 
 def likelihood(all_count, svtype, svlength, minNbAln, l_adj):
     """ Compute likelihood """
