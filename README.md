@@ -17,3 +17,14 @@ SVJedi-graph requires only python and GraphAligner to run.
 ```bash
 ...
 ```
+
+Parameters:
+
+* `-v`  VCF file containing the set of SVs to genotype.
+* `-r`  FASTA file containing the sequence of the reference genome (on which the SVs have been identified).
+* `-o`  Prefix of output files.
+
+## Output files
+
+* `<prefix>_genotyped.vcf`  Genotyped SVs set in VCF format.
+* `<prefix>.gfa`            Variation graph in GFA format.
