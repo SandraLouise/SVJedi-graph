@@ -25,9 +25,9 @@ def main(args):
     )
 
     parser.add_argument(
-        "-n", 
-        "--sv_nodes", metavar="<sv_node_dict>", nargs=1, 
-        help="sv nodes info", 
+        "-i", 
+        "--gfainfo", metavar="<gfa_info>", nargs=1, 
+        help="gfa info", 
         required=False
     )
 
@@ -52,30 +52,29 @@ def main(args):
 
     parser.add_argument(
         "-o", 
-        "--output", 
-        metavar="<output>", 
-        nargs=1, 
-        help="output file")
+        "--outputDir", 
+        metavar="<outputDirectory>", 
+        type=str,
+        required=False)
 
     parser.add_argument(
-        "-v", 
-        "--version", 
-        metavar="<versionID", 
+        "-p", 
+        "--prefix", 
+        metavar="<prefix", 
         type=str,
         required=False)
 
     args = parser.parse_args()
-    
-    if args.sv_nodes is not None:
-        pass #load dict_of_DEL_sv_nodes from json
-    
-    if args.output:
-        output_aln_dict = args.output[0]
+        
+    if args.prefix:
+        output_aln_dict = args.prefix + '_informative_aln' + '.json'
+        gfa_info_dict = args.prefix + "_gfa_info.json"
     else:
-        if args.version:
-            output_aln_dict = 'informative_aln_v3.5_' + args.version + '.json'
-        else:
-            output_aln_dict = 'informative_aln_v3.5.json'
+        output_aln_dict = 'informative_aln.json'
+        gfa_info_dict = "gfa_info.json"
+    
+    if args.outputDir:
+        output_aln_dict = "/".join([args.outputDir, output_aln_dict])
 
     gfa_file = args.gfa[0]
     gaf_file = args.gaf[0]
@@ -84,41 +83,56 @@ def main(args):
     d_end = args.dend
 
 
-    #1. Preparing dict of SV nodes
-    print("Reading gfa file...")
+    if args.gfainfo is None:
+        #1. Listing SVs to genotype
+        # dict_SVs = {} # d = {chrom : [sv_id, ...]}
+        which_region = {}
+        start_end_region = {}
+        rename_node = {}
 
-    if args.sv_nodes is not None:
-        pass #don't recreate dict (real time save or not?)
+        with open(gfa_file, "r") as graph_file:
+            for line in graph_file:
+                if line.startswith("P"):
+                    region, nodes, __ = line.split("\t")[1:]
+                    chrom = region.split("_")[1]
 
-    dict_of_sv_nodes = dict()
-    #dict = {sv_id : [[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node], [first node of component, last node of component]]}
-    dict_of_nodes_len = dict()
-    #dict = {node_id : node_len}
-    
-    #1.1. Writing node list for each SV 
+                    # Add SVs to dict_SVs
+                    # if chrom not in dict_SVs.keys():
+                    #     dict_SVs[chrom] = []
+                    # dict_SVs[chrom].extend(region.split("_")[2:])
 
-    with open(gfa_file) as graph_file:
-        for line in graph_file:  
+                    # Add nodes and region to which_region
+                    nodes = extract_nodes(nodes)
+                    for node in nodes:
+                        which_region[node] = region        
 
-            if line[0] == "S":
-                #Node line
-                __, node_id, node_seq = line.rstrip().split("\t")
-                dict_of_nodes_len[int(node_id)] = len(node_seq)
-
-            if line[0] == "P":
-                #Path line
-                __, sv_region, nodes, nodes_len, __ = line.split("\t")
-
-                if sv_region.startswith("_alt_"):
-                    #Alternative path
-                    continue
+                    # Add first and last node to start_end_region
+                    start_end_region[region] = [nodes[0], nodes[-1]]
                 
-                nodes = extract_nodes(nodes)
-                # if len(sv_region.split("_")) > 3:
-                dict_of_sv_nodes = fill_sv_nodes(dict_of_sv_nodes, sv_region, nodes, dict_of_nodes_len)
-
-
-    print(str(len(dict_of_sv_nodes)), "SVs")
+                elif line.startswith("S"):
+                    node = line.split("\t")[1]
+                    if node[-1] == "a":
+                        for n_id in list(which_region.keys()):
+                            if n_id.startswith(node[:-1]):
+                                which_region[node] = which_region[n_id]
+                                break
+                            elif n_id.startswith("{}:{}".format(node.split(":")[0], str(int(node.split(":")[1][:-1]) - 1))):
+                                new_id = "{}:{}a".format(node.split(":")[0], str(int(node.split(":")[1][:-1]) - 1))
+                                which_region[new_id] = which_region[n_id]
+                                rename_node[node] = new_id
+                                # print(node, n_id, new_id)
+                                break
+        
+        with open(gfa_info_dict, 'w') as file:
+            gfa_info = {"which_region" : which_region, "rename_node" : rename_node, "start_end_region" : start_end_region}
+            file.write(json.dumps(gfa_info, sort_keys=True, indent=4))
+    
+    else:
+        with open(args.gfainfo[0], "r") as file:
+            gfa_info = json.load(file)
+            which_region = gfa_info["which_region"]
+            start_end_region = gfa_info["start_end_region"]
+            rename_node = gfa_info["rename_node"]
 
 
     #2. Reading alignments and filling dictionary of informative alignments
@@ -129,58 +143,86 @@ def main(args):
     list_of_identities = list()
     # dict = {sv_id : [[aln on ref allele], [aln on alt allele]]}
 
-    ################## Tests
-    # aln_reads_before_filters = dict()
-    # aln_reads_after_filters = dict()
-    ##################
-
     with open(gaf_file) as aln_file:
-        for aln in aln_file:
+        for line in aln_file:
 
-            sv_based_alns = read_gaf_aln(aln, dict_of_sv_nodes, dict_of_nodes_len) #list of sv based aln(s) from graph-based aln
+            aln = read_gaf_line(line.rstrip())
+            identity_saved = False
+    
+            # Process path 
+            target_nodes = extract_nodes(aln["Tid"])
 
-            for sv_based_aln in sv_based_alns:
-                read, r_len, r_start, r_end, strand, sv_id, allele, a_len, a_start, a_end, a_coords_for_semiglob, a_identity = sv_based_aln
+            #filter < 2 nodes alns (no breakpoint overlap)
+            if len(target_nodes) < 2:
+                continue
+            
+            # SEMI-GLOBALITY FILTER
+            multi_regions = False
 
-                ################## Tests
-                # if read not in aln_reads_before_filters:
-                #     # read_id = read.split(";")[0].split("Read=")[1]
-                #     aln_reads_before_filters[read] = []
-                # aln_reads_before_filters[read].append("\t".join([read, str(r_len), str(r_start), str(r_end), strand, sv_id, str(allele), str(a_len), str(a_start), str(a_end)]))
-                ##################
+            #correct ins nodes id
+            for i in range(len(target_nodes)):
+                if target_nodes[i] not in which_region.keys():
+                    # target_nodes[i] = rename_node[target_nodes[i]]
+                    which_region[target_nodes[i]] = which_region[rename_node[target_nodes[i]]]
+            
+            target_region = which_region[target_nodes[0]] # target_region = "ref"_chrom_ + "_".join([sv_id])
+                
+            for node in target_nodes[1:]:
+                if node not in which_region.keys():
+                    # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
+                    continue
+                if which_region[node] != target_region:
+                    multi_regions = True
+                    
+            
+            if multi_regions:
+                continue
+                #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
+
+            else:
+                if not is_semiglobal_aln(aln, target_nodes, start_end_region[target_region], d_end):
+                    continue
+                # print("Passed semiglobal filter:\n", aln)
+
+            # Convert path_based aln to sv-based aln
+            target_svs = get_target_svs(target_nodes, target_region)
+            # print(target_region)
+
+            for sv_id in target_svs: #sv_id = chrom + "_" + sv_type + "-" + pos + "-" + end
+                
+                breakpoints = get_breakpoints(sv_id)
+                # print(breakpoints)
+
+                #identify supported allele
+                allele = get_allele(breakpoints, aln["Tid"], target_nodes)
+                # print("Allele: "+str(allele))
 
                 if allele is None:
                     continue
 
-                #Breakpoint overlap filter
-                if do_overlap_breakpoint(a_len, a_start, a_end, l_adj, d_over):
-                    
-                    #Semi-globality filter
+                # BREAKPOINT FILTER
+                if not overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln):
+                    continue
+                
+                # print("Passed breakpoint filter")
 
-                    if is_semiglobal_aln(r_len, r_start, r_end, a_coords_for_semiglob, dict_of_sv_nodes["DEL_" + sv_id][3], d_end, dict_of_nodes_len):
+                # Add aln to dict and save identity
+                dict_sv_id = format_dict_sv_id(sv_id)
 
-                    #Ambiguous read alignment filter (remove redundant reads aligning on complementary ref)
+                if dict_sv_id not in dict_of_informative_aln.keys():
+                    dict_of_informative_aln[dict_sv_id] = [[], []]
 
-                    # ... 
-                    # find replacement score for mapping quality
+                dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
 
-                        if sv_id not in dict_of_informative_aln.keys():
-                            dict_of_informative_aln[sv_id] = [[], []]
-
-                        dict_of_informative_aln[sv_id][allele].append(aln.split("cg:Z:")[0])
-                        list_of_identities.append(a_identity)
-
-                        ################## Tests
-                        # if read not in aln_reads_after_filters:
-                        #     # read_id = read.split(";")[0].split("Read=")[1]
-                        #     aln_reads_after_filters[read] = []
-                        # aln_reads_after_filters[read].append("\t".join([read, str(r_len), str(r_start), str(r_end), strand, sv_id, str(allele), str(a_len), str(a_start), str(a_end)]))
-                        ##################
-    
-
-    #3. Curating informative alignments on identity %
+                if not identity_saved:
+                    list_of_identities.append(aln["Aid"])
+                    identity_saved = True
+            
+    #3. IDENTITY FILTER
+    removed_alns = []
 
     min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
+    # min_id_value = 0.7
 
     for sv, allele_alns in dict_of_informative_aln.items():
         for allele in [0, 1]:
@@ -191,283 +233,281 @@ def main(args):
 
                 if identity > min_id_value:
                     curated_alns.append(aln)
+                else:
+                    removed_alns.append((aln, allele))
 
             dict_of_informative_aln[sv][allele] = curated_alns
-
-
-    ### Stats
+    
+    #Stats
     aln_nb = 0
     for sv in dict_of_informative_aln:
         aln_nb += len(dict_of_informative_aln[sv][0]) + len(dict_of_informative_aln[sv][1])
-    
-    #Save dict
+
     with open(output_aln_dict, 'w') as file:
         file.write(json.dumps(dict_of_informative_aln, sort_keys=True, indent=4))
-    print(str(aln_nb), "informative aln saved")
-
-    ################## Tests
-    # aln_reads_dict = {"before_filters" : aln_reads_before_filters, "after_filters" : aln_reads_after_filters}
-    # with open('reads_aln.json', 'w') as read_stats_file:
-    #     read_stats_file.write(json.dumps(aln_reads_after_filters, sort_keys=True, indent=4))
-    ##################  
+    print(str(aln_nb), "informative sv-based aln saved")
+    # print(len(removed_alns), " alns removed")
 
 
 
-def is_semiglobal_aln(r_len, r_start, r_end, a_coords_for_semiglob, list_component_first_last_node, d_end, nodes_len_dict):
-
-    # a_coords_for_semiglob = [[a_start_node, a_start_on_node], [a_end_node, a_end_on_node]]
-    # list_component_first_last_node = [component first node, component last node]
-
-    global_on_component_left = (list_component_first_last_node[0] == a_coords_for_semiglob[0][0]) and (a_coords_for_semiglob[0][1] <= d_end)
-    global_on_component_right = (list_component_first_last_node[1] == a_coords_for_semiglob[1][0]) and (nodes_len_dict[a_coords_for_semiglob[1][0]] - d_end <= a_coords_for_semiglob[1][1])
-
-    return any([(global_on_component_left) and (global_on_component_right), #allele inside read
-                (r_start <= d_end) and (r_len - d_end <= r_end), #read inside allele
-                (r_start <= d_end) and (global_on_component_right), #read left aligned
-                (global_on_component_left) and (r_len - d_end <= r_end)]) #read right aligned
-     
-def do_overlap_breakpoint(a_len, start, end, l_adj, d_over):
-
-    if (start + d_over) < l_adj < (end - d_over) or (start + d_over) < (a_len - l_adj) < (end - d_over):
-        return True
+def read_gaf_line(line):
+    Qid, Qlen, Qs, Qe = line.split("\t")[:4]
+    Tid, Tlen, Ts, Te = line.split("\t")[5:9]
+    Am, Alen, Aq = line.split("\t")[9:12]
     
-    return False
-
-
-def read_gaf_aln(gaf_line, sv_dict, nodes_len_dict):
-    #Traduit l'alignement => path devient allele_svid ; p_len devient allele_len ; p_start devient allele_start ; p_end devient allele_end
-    # => trouve le sv puis l'allèle puis convertis les positions
-
-    read, r_len, r_start, r_end, strand, path, p_len, p_start, p_end, *__ = gaf_line.rstrip().split("\t")
-    identity = float(gaf_line.rstrip().split("\t")[14].split(":")[-1])
-
-    #Get nodes of path
-    aln_nodes = extract_nodes(path, ordered=True) ## , strand
-    if aln_nodes is None: #pb in path orientation
-        return []
-    elif len(aln_nodes) == 1: #aln on only 1 node can't pass breakpt overap filter
-        return []
+    d = {"Qid" : Qid, "Qlen" : int(Qlen), "Qs" : int(Qs), "Qe" : int(Qe),
+         "Tid" : Tid, "Tlen" : int(Tlen), "Ts" : int(Ts), "Te" : int(Te), 
+         "Am" : int(Am), "Alen" : int(Alen), "Aq" : int(Aq)}
     
-    #TODO: simplify read_gaf_aln() and associated functions
+    if "id:f:" in line:
+        d["Aid"] = float(line.split("id:f:")[-1].split("\t")[0])
+    else:
+        d["Aid"] = d["Am"] / d["Alen"]
+        
+    return d
 
-    #Get orientation of path 
-    orient = check_global_path_orientation(path, aln_nodes)
+def invert_orient(orient):
+    d = {">" : "<", "<" : ">"}
+    return d[orient]
 
-    #Get list of sv the read mapped on
-    target_svs = find_sv(aln_nodes, sv_dict)
-    if len(target_svs) == 0:
-        print('Did not find SV for aln:', gaf_line, 'with path:', path)
-        return []
+def get_allele(bkpts, path, nodes):
 
-    #Translate graph-based aln to sv-based aln
-    sv_based_alns = list()
-    for sv_id in target_svs:
-        sv_type = sv_id.split("_")[0]
-
-        #DELETIONS, INSERTIONS
-        if sv_type in ["DEL", "INS"]:
-            allele = find_DEL_INS_allele(aln_nodes, sv_id, sv_dict, sv_type)
-            a_len, a_start, a_end, a_coords_for_semiglob = get_aln_pos_on_DEL_INS_allele(sv_id, sv_type, allele, aln_nodes, orient, int(p_len), int(p_start), int(p_end), sv_dict, nodes_len_dict)
-
-        #INVERSIONS
-        if sv_type == "INV":
-            continue
-            #ALLELE : 1.determine global path orientation, 2.if global orient = "f": if ">first sv node" or ">last sv node": allele 0; 
-            #POS ON ALLELE : same as DEL/INS but if aln starts/ends on sv node and allele 1
-
-        sv_id = "_".join(sv_id.split("_")[1:]) #remove sv type in sv id
-        sv_based_alns.append([read, int(r_len), int(r_start), int(r_end), strand, sv_id, allele, a_len, a_start, a_end, a_coords_for_semiglob, identity])
-
-    return sv_based_alns
-
-def find_sv(aln_nodes, sv_dict):
-    """
-    Find SV from node in dict of SV nodes
-    """
-    target_sv = set()
-    for sv in sv_dict:
-        for i in range(1, len(aln_nodes), 2): #only search matching sv for every second node of aln path
-            if aln_nodes[i] in sv_dict[sv][0]:
-                target_sv.add(sv)
-    return list(target_sv)
-
-def find_DEL_INS_allele(aln_nodes, sv, sv_dict, sv_type):
-    '''Works for DEL and INS types'''
-    #Look for sv specific nodes in aln nodes
-    for sv_node in sv_dict[sv][1]: #sv nodes = sv sequence nodes
-        if sv_node in aln_nodes:
-            if sv_type == "DEL":
-                return 0
-            elif sv_type == "INS":
-                return 1
-
-    #Look for sv flanking nodes succession in aln nodes
-    left_breakpt_node = str(int(sv_dict[sv][1][0]) - 1) #node preceeding first sv specific node
-    right_breakpt_node = str(int(sv_dict[sv][1][-1]) + 1) #node following last sv specific node
-    flanking_nodes_succession = "-".join([left_breakpt_node, right_breakpt_node])
-    aln_node_succession = "-".join(list(map(str, aln_nodes)))
-
-    if flanking_nodes_succession in aln_node_succession:
-        if sv_type == "DEL":
+    for node in nodes:
+        if node.endswith("a"):
             return 1
-        elif sv_type == "INS":
-            return 0
+
+    for allele in [0,1]:
+        for bkpt in bkpts[allele]:
+        
+            for i in range(len(nodes)-1):
+           
+                # bkpt = [chrom:pos_left, chrom:pos_right]
+                chr1, pos1, orient1 = bkpt[0].split(":")
+                chr2, pos2, orient2 = bkpt[1].split(":")
+
+                # Check if bkpt link in aln path
+                left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
+                right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
+
+                # Check in bkpt link in aln path (reverse)
+                left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
+                right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
+
+                if (left and right) or (left_rev and right_rev):
+                    return allele
+
     
-    #Aln do not inform on sv allele
     return None
 
-def get_aln_pos_on_DEL_INS_allele(sv, sv_type, allele, aln_nodes, orient, p_len, start, end, sv_dict, node_len_dict):
 
-    if allele is None:
-        return None, None, None, [None]
+def format_DEL_INS_id(sv_type, pos, end):
+    return '-'.join([sv_type, str(pos), str(end)])
+def format_INV_id(pos, end):
+    return '-'.join(["INV", str(pos), str(end)])
+def format_BND_id(pos, end_chr, end_pos):
+    return '-'.join(["BND", str(pos), ":".join([end_chr, end_pos])])
 
-    ##########
-    a_pos_on_first_node = sv_dict[sv][2][0] #allele start on sv region's first node
-    a_end_on_last_node = sv_dict[sv][2][1] #allele end on sv region's last node
-    a_start = None #aln start on allele
-    first_aln_node_on_allele = 0 #first aln node on allele
+def format_dict_sv_id(graph_sv_id):
+    '''
+    Graph sv_id:
+    - DEL: chrom + "_" + sv_type + "-" + pos + "-" + len
+    - INS: chrom + "_" + sv_type + "-" + pos + "-" + len
+    - INV: chrom + "_" + sv_type + "-" + pos + "-" + end
+    - BND: chrom + "_" + sv_type + "-" + pos + "-" + end_chr + ":" + end_pos
 
-    while (a_start is None) and (first_aln_node_on_allele < len(aln_nodes)):
-        a_len = 0 #allele length
-
-        for sv_node in sv_dict[sv][0]:
-            #Look for aln start node
-            if sv_node == aln_nodes[first_aln_node_on_allele]:
-                a_start = a_len - a_pos_on_first_node + start - 1 #aln start on allele
-                a_end = a_len - a_pos_on_first_node + end - 1 #aln end on allele
-
-            #Add nodes length to allele length
-            if (sv_type == "DEL") and (allele == 1) and (sv_node in sv_dict[sv][1]):
-                #Don't count ref nodes length in alt allele length
-                continue
-            elif (sv_type == "INS") and (allele == 0) and (sv_node in sv_dict[sv][1]):
-                #Don't count alt nodes length in ref allele length
-                continue
-
-            else:
-                if sv_node == sv_dict[sv][0][-1]:
-                    #Add only remaining allele length for last node of sv region
-                    a_len += a_end_on_last_node + 1
-                else:
-                    a_len += node_len_dict[sv_node]
-        
-        first_aln_node_on_allele += 1
-        ##########
+    Dict sv_id:
+    - DEL/INS/INV: chrom + "_" + pos + "-" + length
+    - BND: ?
+    '''
+    chrom, info = graph_sv_id.split("_")
+    sv_type, pos, end = info.split("-")
 
     if sv_type in ["DEL", "INS"]:
-        a_start_node = aln_nodes[0]
-        a_end_node = aln_nodes[-1]
+        return "_".join([chrom, graph_sv_id.split(sv_type + "-")[1]])
 
-        if orient == "f":
-            a_start_on_node = start
-            a_end_on_node = node_len_dict[a_end_node] - (p_len - end)
-        elif orient =="r":
-            a_start_on_node = (p_len - end) - 1
-            a_end_on_node = node_len_dict[a_end_node] - start
+    elif sv_type == "INV":
+        return "_".join([chrom, "-".join([pos, "0"])])
 
-    return a_len, a_start, a_end, [[a_start_node, a_start_on_node], [a_end_node, a_end_on_node]]
+    # elif type == "BND":
+    #     return ""
 
-def fill_sv_nodes(node_dict, sv_region, nodes, dict_of_nodes_len):
-    l_adj = 5000
-    chrom = sv_region.split("_")[1]
-    first_sv_start = int(sv_region.split('_')[2].split('-')[1]) #start of first sv on chrom
-    sv_number = len(sv_region.split("_")) - 2
-
-    for sv in range(1, sv_number + 1):
-        sv_type, pos, length = sv_region.split('_')[1 + sv].split('-')
-        sv_id = "_".join([sv_type, chrom, "-".join([pos, length])])
-        node_dict[sv_id] = [[], [], [], []] #[[sv region nodes], [sv nodes], [sv region start on first region node, sv region end on last region node], [component first node, component last node]]
-
-        #Get coordinates of sv and sv region
-        if sv_type in ["DEL", "INS", "INV"]:
-            region_start = int(pos) - first_sv_start #start of current sv REGION on graph
-            sv_start = int(pos) - first_sv_start + l_adj #start of current sv on graph
-            if int(length) <= 2 * l_adj:
-                sv_end = sv_start + int(length) - 1 #end of current sv on graph
-            else:
-                sv_end = sv_start + 2 * l_adj - 1 #end if sv sequence cut
-            region_end = sv_end + l_adj #end of current sv REGION on graph
-
-        #Get nodes of sv (works for DEL, INS, INV)
-        pos_on_graph = 0
-        for node in nodes:
-
-            #Find first node of sv REGION
-            if (pos_on_graph < region_start + 1) and (pos_on_graph + dict_of_nodes_len[node] > region_start): #node contains sv region start
-                node_dict[sv_id][0].append(node) #add node to sv region nodes
-
-                region_start_on_node = region_start - pos_on_graph
-                node_dict[sv_id][2].append(region_start_on_node)
-
-                pos_on_graph += dict_of_nodes_len[node]
-
-                while (pos_on_graph < region_end) and (node < nodes[-1]): #sv region end after start of node
-                    node += 1
-                    node_dict[sv_id][0].append(node)
-
-                    #Get sv specific nodes
-                    if (pos_on_graph > sv_start - 1) and (pos_on_graph < sv_end + 1): #node contains sv
-                        node_dict[sv_id][1].append(node) #add node to sv nodes
-
-                    pos_on_graph += dict_of_nodes_len[node]
-                
-                #Found all sv region nodes (exited while loop)
-                region_end_on_node = region_end - (pos_on_graph - dict_of_nodes_len[node - 1]) #works for DEL, INS, INV
-                node_dict[sv_id][2].append(region_end_on_node)
-                break
-
-            pos_on_graph += dict_of_nodes_len[node]
-        
-        node_dict[sv_id][3] = [nodes[0], nodes[-1]]
+def get_breakpoints(sv_id):
+    '''Returns all breakpoints coordinates (as a list of one duple per bkpt) for a SV (sorted by allele)'''
+    #Considering 2 positions possible for left coord (SV start) because of particularities of real SV evaluation set
     
-    return node_dict
+    chrom, info = sv_id.split("_")
+    svtype, pos, end = info.split("-")
+    bkpts = [[], []] # [[allele 0], [allele 1]]
+    forward = ">"
+    reverse = "<"
 
-def fill_allele_specific_nodes(alt_path_line):
-    pass #implement as function later #or not
+    if svtype == "DEL":
+        # end = str(int(pos) + int(end) + 1)
+        bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward])),
+                    (":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward]))] #left coord, right coord
+        bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward])), 
+                    (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])), 
+                    (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward]))]
+    
+    elif svtype == "INS":
+        end = str(int(pos) + 1)
+        bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))] #left coord, right coord
+        bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1)+"a", forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(pos)+1)+"a", forward])), 
+                    (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos+"a", forward])), 
+                    (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward])), 
+                    (":".join([chrom, end+"a", forward]), ":".join([chrom, str(int(end)-1), forward]))]
+    
+    elif svtype == "INV":
+        bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
+                    (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))]
+        bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), reverse])), 
+                    (":".join([chrom, str(int(end)-1), reverse]), ":".join([chrom, end, forward]))]
 
-def check_global_path_orientation(gaf_path, nodes):
 
-    if (nodes[0] > nodes[-1]) and (gaf_path[0] == "<"):
-        orient = "r" #reverse
+    elif svtype == "BND":
+        pass
+
+    return bkpts
+
+def overlap_breakpoints(bkpts, sv_id, allele, aln_nodes, d_over, aln):
+
+    if any([check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln) for bkpt in bkpts[allele]]):
+        return True
+
+    return False
+
+def check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
+    bkpt_leftCoord = bkpt[0].split(":")[1]
+    bkpt_rightCoord = bkpt[1].split(":")[1]
+    unaligned_start = aln["Ts"]
+    unaligned_end = aln["Tlen"] - aln["Te"] - 1
+
+    #Check presence of breakpoint nodes
+    found_leftNode = False
+    found_rightNode = False
+    for node in aln_nodes:
+        if get_node_end(node) == bkpt_leftCoord:
+            found_leftNode = True
+            bkpt_leftNode = node
+        elif get_node_start(node) == bkpt_rightCoord:
+            found_rightNode = True
+            bkpt_rightNode = node
+
+    if not (found_leftNode and found_rightNode):
+        return False
+
+    #Check breakpoint overlap
+    left_overlap = False
+    right_overlap = False
+
+    #Forward alignment
+    if aln_nodes.index(bkpt_leftNode) < aln_nodes.index(bkpt_rightNode):
+        left_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_start >= d_over
+        # if sum(get_node_len(node) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_left >= d_over:
+        #     left_overlap = True
+        right_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
+        # if sum(get_node_len(node) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_right >= d_over:
+        #     right_overlap = True
+    
+    #Reverse alignment
     else:
-        orient = "f" #forward
+        left_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[aln_nodes.index(bkpt_leftNode):]) - unaligned_end >= d_over
+        right_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[:aln_nodes.index(bkpt_rightNode)+1]) - unaligned_start >= d_over
 
-    return orient
+    return left_overlap and right_overlap   
 
-def extract_nodes(path, *args, **kwargs):
+def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
+    # a_coords = [[target_nodes[0], int(p_start)], [target_nodes[-1], int(p_len)-int(p_end)-1]]
+    # a_coords_for_semiglob = [[a_start_node, unaligned_left], [a_end_node, unaligned_right]]
+    # list_component_first_last_node = [component first node, component last node]
+
+    glob_region_left_f = all([start_end_region[0] == target_nodes[0], aln["Ts"] <= d_end])
+    glob_region_left_r = all([start_end_region[0] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
+    glob_region_left = any([glob_region_left_f, glob_region_left_r])
+
+    glob_region_right_f = all([start_end_region[1] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
+    glob_region_right_r = all([start_end_region[1] == target_nodes[0], aln["Ts"] <= d_end <= d_end])
+    glob_region_right = any([glob_region_right_f, glob_region_right_r])
+
+    return any([(glob_region_left) and (glob_region_right), #allele inside read
+                (aln["Qs"] <= d_end) and (aln["Qlen"] - d_end <= aln["Qe"]), #read inside allele
+                (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
+                (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
+
+def get_target_svs(target_nodes, target_region):
+    target_svs = []
+    left_node_start = get_node_start(target_nodes[0])
+    if left_node_start.endswith("a"):
+        left_node_start = int(left_node_start[:-1])
+    else:
+        left_node_start = int(left_node_start)
+
+    right_node_end = get_node_end(target_nodes[-1])
+    if right_node_end.endswith("a"):
+        right_node_end = int(right_node_end[:-1])
+    else:
+        right_node_end = int(right_node_end)
+
+    for sv_id in target_region.split("_")[2:]:
+        if not sv_id.startswith("BND"):
+            sv_type, sv_start, sv_end = sv_id.split("-")
+            # if sv_type in ["DEL", "INS"]:
+            #     sv_end = int(sv_start) + int(sv_end)
+
+            if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end) , min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
+                chrom = target_region.split("_")[1]
+                target_svs.append("_".join([chrom, sv_id])) #add chrom to id for later save in aln dict
+
+        else:
+            pass
+            #TO-DO: handle BNDs
+
+    return target_svs
+
+def get_node_start(node_id):
+    #node_id = chrom : start - end
+    if node_id.endswith("a"):
+        return node_id.split(":")[1]
+    else:
+        return node_id.split(":")[1].split("-")[0]
+def get_node_end(node_id):
+    if node_id.endswith("a"):
+        end = str(int(get_node_start(node_id)[:-1]) + 1) + "a"
+    else:
+        end = node_id.split(":")[1].split("-")[1]
+    return end
+def get_node_len(node_id, sv_id):
+    if node_id.endswith("a"):
+        return int(sv_id.split("-")[-1])
+    else:
+        return int(get_node_end(node_id)) - int(get_node_start(node_id)) + 1
+
+def extract_nodes(p, *args, **kwargs):
     """
     Return nodes in list format from nodes in str format. 
     Can take path orientation into account if input is gaf path.
 
     Args:
         str_node_list (str) : node list in str, with nodes separated by special characters
-        ordered (bool) : take path orientation into account or not
+        orient (bool) : checks orientation of nodes in aln path (ONLY WITH GAF PATH)
 
     Ex: '1+,2+,3+,4+' => [1, 2, 3, 4]   (path in gfa)
            '>1>2>3>4' => [1, 2, 3, 4]   (path in gaf)
     """
-    check_orient = kwargs.get('ordered', False)
+    # check_orient = kwargs.get('orient', False)
 
-    nodes = re.split(r'\W+', path)
+    #Path in GAF
+    if p[0] in [">", "<"]:
+        nodes = [s for s in re.split(r'[<>]', p) if s]
 
-    if nodes[0] == "":
-        nodes = nodes[1:]
-    if nodes[-1] == "":
-        nodes = nodes[:-1]
-    
-    nodes = list(map(int, nodes))
-
-    if check_orient:
-        orient = check_global_path_orientation(path, nodes)
-
-        if (orient == "r") and (len(nodes) > 1):
-            # strand = '-'
-            nodes.reverse()
-            return nodes #can return strand if needed
-        
-        elif (orient == "f"):
-            # strand = '+'
-            return nodes #can return strand if needed
+    #Path in GFA
+    else:
+        nodes = [s[:-1] for s in re.split(r'[,]', p) if s]
 
     return nodes
 
