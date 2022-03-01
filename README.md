@@ -18,7 +18,7 @@ SVJedi-graph requires only python and GraphAligner to run.
 ...
 ```
 
-Parameters:
+### Parameters:
 
 * `-v`  VCF file containing the set of SVs to genotype.
 * `-r`  FASTA file containing the sequence of the reference genome (on which the SVs have been identified).
