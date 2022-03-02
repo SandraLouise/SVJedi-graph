@@ -34,5 +34,6 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> -p <output_pre
 
 * `<prefix>.gfa`           Variation graph in [GFA format](https://github.com/GFA-spec/GFA-spec).
 * `<prefix>.gaf`           Mapping results from GraphAligner in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf).
+* `<prefix>_informative_aln.json`
 * `<prefix>_genotype.vcf`  Genotyped SVs set in VCF format.
 
