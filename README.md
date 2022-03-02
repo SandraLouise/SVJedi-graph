@@ -12,7 +12,7 @@ SVJedi-graph requires only python and GraphAligner to run. Currently works best 
 conda install -c bioconda graphaligner=1.0.12
 ```
 
-## Usage
+## Run
 
 Make sure to activate your environment if you installed GraphAligner _via_ Conda.
 
@@ -20,7 +20,9 @@ Make sure to activate your environment if you installed GraphAligner _via_ Conda
 python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> -p <output_prefix> -t <threads>
 ```
 
+
 ### Parameters
+
 
 * `-v`  VCF file containing the set of SVs to genotype.
 * `-r`  FASTA file containing the reference genome (on which the SVs have been identified).
