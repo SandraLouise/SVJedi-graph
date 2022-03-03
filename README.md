@@ -18,7 +18,7 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph/
 Make sure to activate your environment if you installed GraphAligner _via_ Conda.
 
 ```bash
-python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> -p <output_prefix> -t <threads>
+python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [-p <output_prefix>] [-t <threads>]
 ```
 
 
