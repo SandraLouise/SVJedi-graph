@@ -10,11 +10,6 @@ SVJedi-graph requires only python and GraphAligner to run. Currently works best 
 
 ```bash
 conda install -c bioconda graphaligner=1.0.12
-```
-
-Then you only need to clone the repository.
-
-```bash
 git clone https://gitlab.inria.fr/sromain/svjedi-graph/
 ```
 
