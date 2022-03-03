@@ -21,9 +21,7 @@ Make sure to activate your environment if you installed GraphAligner _via_ Conda
 python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
 ```
 
-
-### Parameters
-
+## Parameters
 
 * `-v`  VCF file containing the set of SVs to genotype.
 * `-r`  FASTA file containing the reference genome (on which the SVs have been identified).
@@ -31,10 +29,11 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_p
 * `-p`  Prefix of output files.
 * `-t`  Number of threads to use for the mapping step.
 
-### Output files
+## Output files
 
 * `<prefix>.gfa`           Variation graph in [GFA format](https://github.com/GFA-spec/GFA-spec).
 * `<prefix>.gaf`           Mapping results from GraphAligner in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf).
 * `<prefix>_informative_aln.json`
 * `<prefix>_genotype.vcf`  Genotyped SVs set in VCF format.
 
+---
