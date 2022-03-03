@@ -8,7 +8,7 @@ SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF f
 
 SVJedi-graph requires only python and GraphAligner to run. Currently works best with GraphAligner v1.0.12 (https://github.com/maickrau/GraphAligner/releases/tag/v1.0.12). Simplest way to install GraphAligner is with conda.
 
-```
+```bash
 conda install -c bioconda graphaligner=1.0.12
 git clone https://gitlab.inria.fr/sromain/svjedi-graph/
 ```
@@ -17,11 +17,11 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph/
 
 Make sure to activate your environment if you installed GraphAligner _via_ Conda.
 
-```
+```bash
 python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
 ``` 
 
-## Parameters
+### Parameters
 
 * `-v`  VCF file containing the set of SVs to genotype.
 * `-r`  FASTA file containing the reference genome (on which the SVs have been identified).
@@ -29,7 +29,7 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_p
 * `-p`  Prefix of output files.
 * `-t`  Number of threads to use for the mapping step.
 
-## Output files
+### Output files
 
 * `<prefix>.gfa`           Variation graph in [GFA format](https://github.com/GFA-spec/GFA-spec).
 * `<prefix>.gaf`           Mapping results from GraphAligner in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf).
