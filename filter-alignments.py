@@ -86,13 +86,17 @@ def main(args):
     if args.gfainfo is None:
         #1. Listing SVs to genotype
         # dict_SVs = {} # d = {chrom : [sv_id, ...]}
+        region_svs = {}
         which_region = {}
         start_end_region = {}
         rename_node = {}
 
         with open(gfa_file, "r") as graph_file:
             for line in graph_file:
-                if line.startswith("P"):
+                if line.startswith("#"):
+                    region_svs[line[1:].split("\t")[0]] = list(line.rstrip().split("\t")[1].split(";"))
+
+                elif line.startswith("P"):
                     region, nodes, __ = line.split("\t")[1:]
                     chrom = region.split("_")[1]
 
@@ -165,7 +169,7 @@ def main(args):
                     # target_nodes[i] = rename_node[target_nodes[i]]
                     which_region[target_nodes[i]] = which_region[rename_node[target_nodes[i]]]
             
-            target_region = which_region[target_nodes[0]] # target_region = "ref"_chrom_ + "_".join([sv_id])
+            target_region = which_region[target_nodes[0]] # target_region = chrom_id
                 
             for node in target_nodes[1:]:
                 if node not in which_region.keys():
@@ -185,11 +189,13 @@ def main(args):
                 # print("Passed semiglobal filter:\n", aln)
 
             # Convert path_based aln to sv-based aln
-            target_svs = get_target_svs(target_nodes, target_region)
+            target_svs = get_target_svs(target_nodes, target_region, region_svs)
             # print(target_region)
 
-            for sv_id in target_svs: #sv_id = chrom + "_" + sv_type + "-" + pos + "-" + end
-                
+            # print(target_svs)
+
+            for sv_id in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
+
                 breakpoints = get_breakpoints(sv_id)
                 # print(breakpoints)
 
@@ -221,8 +227,9 @@ def main(args):
     #3. IDENTITY FILTER
     removed_alns = []
 
-    min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
+    # min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
     # min_id_value = 0.7
+    min_id_value = 0.0
 
     for sv, allele_alns in dict_of_informative_aln.items():
         for allele in [0, 1]:
@@ -247,6 +254,8 @@ def main(args):
         file.write(json.dumps(dict_of_informative_aln, sort_keys=True, indent=4))
     print(str(aln_nb), "informative sv-based aln saved")
     # print(len(removed_alns), " alns removed")
+
+    # print(dict_of_informative_aln)
 
 
 
@@ -278,6 +287,7 @@ def get_allele(bkpts, path, nodes):
 
     for allele in [0,1]:
         for bkpt in bkpts[allele]:
+            # print(bkpt)
         
             for i in range(len(nodes)-1):
            
@@ -310,23 +320,21 @@ def format_BND_id(pos, end_chr, end_pos):
 def format_dict_sv_id(graph_sv_id):
     '''
     Graph sv_id:
-    - DEL: chrom + "_" + sv_type + "-" + pos + "-" + len
-    - INS: chrom + "_" + sv_type + "-" + pos + "-" + len
+    - DEL: chrom + "_" + sv_type + "-" + pos + "-" + end
+    - INS: chrom + "_" + sv_type + "-" + pos + "-" + end
     - INV: chrom + "_" + sv_type + "-" + pos + "-" + end
     - BND: chrom + "_" + sv_type + "-" + pos + "-" + end_chr + ":" + end_pos
 
     Dict sv_id:
-    - DEL/INS/INV: chrom + "_" + pos + "-" + length
+    - DEL/INS/INV: chrom + "_" + pos + "-" + end
     - BND: ?
     '''
-    chrom, info = graph_sv_id.split("_")
+    # print(graph_sv_id)
+    chrom, info = graph_sv_id.split(":")
     sv_type, pos, end = info.split("-")
 
-    if sv_type in ["DEL", "INS"]:
-        return "_".join([chrom, graph_sv_id.split(sv_type + "-")[1]])
-
-    elif sv_type == "INV":
-        return "_".join([chrom, "-".join([pos, "0"])])
+    if sv_type in ["DEL", "INS", "INV"]:
+        return ":".join([chrom, "-".join([pos, end])])
 
     # elif type == "BND":
     #     return ""
@@ -335,7 +343,7 @@ def get_breakpoints(sv_id):
     '''Returns all breakpoints coordinates (as a list of one duple per bkpt) for a SV (sorted by allele)'''
     #Considering 2 positions possible for left coord (SV start) because of particularities of real SV evaluation set
     
-    chrom, info = sv_id.split("_")
+    chrom, info = sv_id.split(":")
     svtype, pos, end = info.split("-")
     bkpts = [[], []] # [[allele 0], [allele 1]]
     forward = ">"
@@ -364,9 +372,11 @@ def get_breakpoints(sv_id):
     
     elif svtype == "INV":
         bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                    (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))]
+                    (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
+                    (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
         bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), reverse])), 
-                    (":".join([chrom, str(int(end)-1), reverse]), ":".join([chrom, end, forward]))]
+                    (":".join([chrom, str(int(end)-1), reverse]), ":".join([chrom, end, forward])),
+                    (":".join([chrom, end, reverse]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
 
 
     elif svtype == "BND":
@@ -439,7 +449,7 @@ def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
                 (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
                 (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
 
-def get_target_svs(target_nodes, target_region):
+def get_target_svs(target_nodes, target_region, region_svs):
     target_svs = []
     left_node_start = get_node_start(target_nodes[0])
     if left_node_start.endswith("a"):
@@ -453,19 +463,24 @@ def get_target_svs(target_nodes, target_region):
     else:
         right_node_end = int(right_node_end)
 
-    for sv_id in target_region.split("_")[2:]:
-        if not sv_id.startswith("BND"):
-            sv_type, sv_start, sv_end = sv_id.split("-")
-            # if sv_type in ["DEL", "INS"]:
-            #     sv_end = int(sv_start) + int(sv_end)
+    if target_region not in region_svs.keys():
+        return target_svs
 
-            if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end) , min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
-                chrom = target_region.split("_")[1]
-                target_svs.append("_".join([chrom, sv_id])) #add chrom to id for later save in aln dict
+    else:
+        for sv_id in region_svs[target_region]:
+            if not sv_id.startswith("BND"):
+                sv_type, sv_start, sv_end = sv_id.split("-")
+                # if sv_type in ["DEL", "INS"]:
+                #     sv_end = int(sv_start) + int(sv_end)
 
-        else:
-            pass
-            #TO-DO: handle BNDs
+                if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
+                    # chrom = target_region.split("_")[1]
+                    chrom = target_region
+                    target_svs.append(":".join([chrom, sv_id])) #add chrom to id for later save in aln dict
+
+            else:
+                pass
+                #TO-DO: handle BNDs
 
     return target_svs
 

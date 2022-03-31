@@ -6,7 +6,7 @@
 *******************************************************************************"""
 
 import sys
-import numpy as np
+#import numpy as np
 import argparse
 import math
 from decimal import *
@@ -63,6 +63,18 @@ def main(args):
     # print(len(missing_id))
     # print(missing_id[:10])
 
+def get_info(info, label):
+    #Info label first in info field
+    if info.split(";")[0].startswith(label+"="):
+        return info.split(label+"=")[1].split(";")[0]
+
+    #Info label last in info field
+    elif info.split(";")[-1].startswith(label+"="):
+        return info.split(label.join([";", "="]))[1]
+
+    else:
+        return info.split(label.join([";", "="]))[1].split(";")[0]
+
 def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id, l_adj, missing_id):
     """ Output in VCF format and take genotype decision """
     getcontext().prec = 28
@@ -82,10 +94,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
             else:
                 in_chrom, in_start, _, __, in_type, ___, ____, in_info, *_ = line.rstrip("\n").split("\t")
 
-                ### get END ###
-                end = line.split(";END=")[1].split(";")[0]
-
-                ### get SVTYPE ###
+                ### get SVTYPE ###
                 if 'SVTYPE' in in_info:
                     if in_info.split(';')[-1].startswith('SVTYPE='):
                         svtype = in_info.split('SVTYPE=')[1]
@@ -93,6 +102,11 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                         svtype = in_info.split('SVTYPE=')[1].split(';')[0]
                 else:
                     svtype = ''
+                
+                ### get END ###
+                #end = line.split(";END=")[1].split(";")[0]
+                if svtype != "BND":
+                    end = get_info(in_info, "END")
 
                 
                 ### get LENGTH for DELETION ###                 
@@ -167,7 +181,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                 #######################################################################################
                 #Asign genotype 
 
-                in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                in_sv = in_chrom + ":" + in_start + "-" + str(end)
                 if svtype in ('DEL', 'INS', 'INV', 'BND') and in_sv in list(dictReadAtJunction.keys()) and abs(in_length) >= 50:
 
                     #-------------------#
