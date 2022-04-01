@@ -98,7 +98,7 @@ def main(args):
 
                 elif line.startswith("P"):
                     region, nodes, __ = line.split("\t")[1:]
-                    chrom = region.split("_")[1]
+                    chrom = region
 
                     # Add SVs to dict_SVs
                     # if chrom not in dict_SVs.keys():
