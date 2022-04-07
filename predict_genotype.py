@@ -126,7 +126,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                             in_length = abs(int(in_info.split("SVLEN=")[1].split(";")[0]))
                 
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
-                    in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
                     
                 
                 ### get LENGTH for INSERTION ###                    
@@ -141,7 +142,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                         in_length = len(in_type) 
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
-                    in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
                 
                 
                 ### get LENGTH for INVERSION ###                
@@ -154,34 +156,66 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
                     # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
-                    in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
 
 
                 ### get sv id for TRANSLOCATION ###             
                 elif svtype == 'BND': 
-                    if in_info.startswith("END="):
-                        end = in_info.split("END=")[1].split(';')[0]
-                    elif ";END=" in in_info:
-                        end = in_info.split(";END=")[1].split(';')[0]   
-                    elif "[" in  in_type:
-                        end = in_type.split(':')[1].split('[')[0]
-                    elif "]" in  in_type:
-                        end = in_type.split(':')[1].split(']')[0]
+
+                    in_length = 50
                     
-                    if 'CHR2=' in in_info: 
-                        chr2 = in_info.split('CHR2=')[1].split(';')[0]
-                    elif '[' in in_type:
-                            chr2 = in_type.split(':')[0].split('[')[1]     #ALT[CHR2:POSTION[
-                    elif ']' in in_type:
-                            chr2 = in_type.split(':')[0].split(']')[1]     #ALT]CHR2:POSTION]
+                    # if in_info.startswith("END="):
+                    #     end = in_info.split("END=")[1].split(';')[0]
+                    # elif ";END=" in in_info:
+                    #     end = in_info.split(";END=")[1].split(';')[0]   
+                    # elif "[" in  in_type:
+                    #     end = in_type.split(':')[1].split('[')[0]
+                    # elif "]" in  in_type:
+                    #     end = in_type.split(':')[1].split(']')[0]
+                    
+                    # if 'CHR2=' in in_info: 
+                    #     chr2 = in_info.split('CHR2=')[1].split(';')[0]
+                    # elif '[' in in_type:
+                    #         chr2 = in_type.split(':')[0].split('[')[1]     #ALT[CHR2:POSTION[
+                    # elif ']' in in_type:
+                    #         chr2 = in_type.split(':')[0].split(']')[1]     #ALT]CHR2:POSTION]
+
+                    if "[" in in_type:
+                        alt = list(filter(bool, in_type.split("[")))
+
+                        if ":" in alt[1]:
+                            chr2 = alt[1].split(":")[0]
+                            end = alt[1].split(":")[1]
+                            in_sv = ":".join([in_chrom, in_start]) + "[" + alt[1] + "["
+                        else:
+                            chr2 = alt[0].split(":")[0]
+                            end = alt[0].split(":")[1]
+                            in_sv = "[" + alt[1] + "[" + ":".join([in_chrom, in_start])
+                    
+                    elif "]" in in_type:
+                        alt = list(filter(bool, in_type.split("]")))
+
+                        if ":" in alt[1]:
+                            chr2 = alt[1].split(":")[0]
+                            end = alt[1].split(":")[1]
+                            in_sv = ":".join([in_chrom, in_start]) + "]" + alt[1] + "]"
+                        else:
+                            chr2 = alt[0].split(":")[0]
+                            end = alt[0].split(":")[1]
+                            in_sv = "]" + alt[1] + "]" + ":".join([in_chrom, in_start])
+                    
+                    else:
+                        in_sv = "wrong_format"
+
                             
-                    in_sv = in_chrom + "_" + in_start + "-" + chr2 + "-" + end #define sv id for TRANS
+                    # in_sv = in_chrom + "_" + in_start + "-" + chr2 + "-" + end #define sv id for TRANS
                 
                 
                 #######################################################################################
                 #Asign genotype 
 
-                in_sv = in_chrom + ":" + in_start + "-" + str(end)
+                # in_sv = in_chrom + ":" + in_start + "-" + str(end)
                 if svtype in ('DEL', 'INS', 'INV', 'BND') and in_sv in list(dictReadAtJunction.keys()) and abs(in_length) >= 50:
 
                     #-------------------#
