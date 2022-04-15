@@ -43,7 +43,7 @@ def main(args):
     inREF = args.ref
     inFQ = args.reads
     outPrefix = args.prefix
-    threads = args.threads[0]
+    threads = args.threads
 
     ladj = 5000
 
