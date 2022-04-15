@@ -5,6 +5,7 @@ import argparse
 import re
 import json
 import statistics as stats
+from construct_graph.py import parse_BND_id
 
 def main(args):
 
@@ -87,8 +88,8 @@ def main(args):
         #1. Listing SVs to genotype
         # dict_SVs = {} # d = {chrom : [sv_id, ...]}
         region_svs = {}
-        which_region = {}
-        start_end_region = {}
+        which_chrom = {}
+        start_end_chrom = {}
         rename_node = {}
 
         with open(gfa_file, "r") as graph_file:
@@ -105,37 +106,37 @@ def main(args):
                     #     dict_SVs[chrom] = []
                     # dict_SVs[chrom].extend(region.split("_")[2:])
 
-                    # Add nodes and region to which_region
+                    # Add nodes and region to which_chrom
                     nodes = extract_nodes(nodes)
                     for node in nodes:
-                        which_region[node] = region        
+                        which_chrom[node] = region        
 
-                    # Add first and last node to start_end_region
-                    start_end_region[region] = [nodes[0], nodes[-1]]
+                    # Add first and last node to start_end_chrom
+                    start_end_chrom[region] = [nodes[0], nodes[-1]]
                 
                 elif line.startswith("S"):
                     node = line.split("\t")[1]
                     if node[-1] == "a":
-                        for n_id in list(which_region.keys()):
+                        for n_id in list(which_chrom.keys()):
                             if n_id.startswith(node[:-1]):
-                                which_region[node] = which_region[n_id]
+                                which_chrom[node] = which_chrom[n_id]
                                 break
                             elif n_id.startswith("{}:{}".format(node.split(":")[0], str(int(node.split(":")[1][:-1]) - 1))):
                                 new_id = "{}:{}a".format(node.split(":")[0], str(int(node.split(":")[1][:-1]) - 1))
-                                which_region[new_id] = which_region[n_id]
+                                which_chrom[new_id] = which_chrom[n_id]
                                 rename_node[node] = new_id
                                 # print(node, n_id, new_id)
                                 break
         
         with open(gfa_info_dict, 'w') as file:
-            gfa_info = {"which_region" : which_region, "rename_node" : rename_node, "start_end_region" : start_end_region}
+            gfa_info = {"which_chrom" : which_chrom, "rename_node" : rename_node, "start_end_chrom" : start_end_chrom}
             file.write(json.dumps(gfa_info, sort_keys=True, indent=4))
     
     else:
         with open(args.gfainfo[0], "r") as file:
             gfa_info = json.load(file)
-            which_region = gfa_info["which_region"]
-            start_end_region = gfa_info["start_end_region"]
+            which_chrom = gfa_info["which_chrom"]
+            start_end_chrom = gfa_info["start_end_chrom"]
             rename_node = gfa_info["rename_node"]
 
 
@@ -161,38 +162,41 @@ def main(args):
                 continue
             
             # SEMI-GLOBALITY FILTER
-            multi_regions = False
+            multi_chrom = False
 
             #correct ins nodes id
             for i in range(len(target_nodes)):
-                if target_nodes[i] not in which_region.keys():
+                if target_nodes[i] not in which_chrom.keys():
                     # target_nodes[i] = rename_node[target_nodes[i]]
-                    which_region[target_nodes[i]] = which_region[rename_node[target_nodes[i]]]
+                    which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
             
-            target_region = which_region[target_nodes[0]] # target_region = chrom_id
+            target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
+            targets = [target_chrom]
                 
             for node in target_nodes[1:]:
-                if node not in which_region.keys():
+                if node not in which_chrom.keys():
                     # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
                     continue
-                if which_region[node] != target_region:
-                    multi_regions = True
+                if which_chrom[node] != target_chrom:
+                    multi_chrom = True
+                    targets.append(which_chrom[node])
                     
-            
-            if multi_regions:
-                continue
+            # Inter-chromosomal BNDs
+            if multi_chrom:
+                target_chrom = targets
                 #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
 
             else:
-                if not is_semiglobal_aln(aln, target_nodes, start_end_region[target_region], d_end):
+                if not is_semiglobal_aln(aln, target_nodes, start_end_chrom[target_chrom], d_end):
                     continue
                 # print("Passed semiglobal filter:\n", aln)
 
             # Convert path_based aln to sv-based aln
-            target_svs = get_target_svs(target_nodes, target_region, region_svs)
-            # print(target_region)
+            target_svs = get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs)
+            # print(target_chrom)
 
-            # print(target_svs)
+            if len(target_svs) != 0:
+                print(target_svs)
 
             for sv_id in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
 
@@ -449,38 +453,85 @@ def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
                 (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
                 (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
 
-def get_target_svs(target_nodes, target_region, region_svs):
+def get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs):
+
     target_svs = []
-    left_node_start = get_node_start(target_nodes[0])
-    if left_node_start.endswith("a"):
-        left_node_start = int(left_node_start[:-1])
-    else:
-        left_node_start = int(left_node_start)
 
-    right_node_end = get_node_end(target_nodes[-1])
-    if right_node_end.endswith("a"):
-        right_node_end = int(right_node_end[:-1])
-    else:
-        right_node_end = int(right_node_end)
+    def get_left_right_ends(node_list):
+        left_node_start = get_node_start(node_list[0])
+        if left_node_start.endswith("a"):
+            left_node_start = int(left_node_start[:-1])
+        else:
+            left_node_start = int(left_node_start)
 
-    if target_region not in region_svs.keys():
-        return target_svs
+        right_node_end = get_node_end(node_list[-1])
+        if right_node_end.endswith("a"):
+            right_node_end = int(right_node_end[:-1])
+        else:
+            right_node_end = int(right_node_end)
+        
+        return left_node_start, right_node_end
 
-    else:
-        for sv_id in region_svs[target_region]:
-            if not sv_id.startswith("BND"):
-                sv_type, sv_start, sv_end = sv_id.split("-")
+
+    if not multi_chrom:
+
+        if target_chrom not in region_svs.keys():
+            return target_svs
+
+        left_node_start, right_node_end = get_left_right_ends(target_nodes)
+
+        for sv_id in region_svs[target_chrom]:
+
+            if sv_id.startswith("BND-"):
+                left_coords, right_coords = parse_BND_id(target_chrom, sv_id.split("BND-")[1])
+                sv_start = left_coords[1]
+                sv_end = right_coords[1]
+
+            else:
+                __, sv_start, sv_end = sv_id.split("-")
                 # if sv_type in ["DEL", "INS"]:
                 #     sv_end = int(sv_start) + int(sv_end)
 
-                if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
-                    # chrom = target_region.split("_")[1]
-                    chrom = target_region
-                    target_svs.append(":".join([chrom, sv_id])) #add chrom to id for later save in aln dict
+            if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
+                target_svs.append(":".join([target_chrom, sv_id])) #add chrom to id for later save in aln dict
 
-            else:
-                pass
-                #TO-DO: handle BNDs
+    else:
+
+        for chrom in target_chrom:
+            if chrom not in region_svs.keys():
+                return target_svs
+
+        for chrom in target_chrom:
+
+            chrom_nodes = [node for node in target_nodes if node.startswith(chrom)]
+            left_node_start, right_node_end = get_left_right_ends(chrom_nodes)
+
+            for sv_id in region_svs[chrom]:
+                if sv_id.startswith("BND-"):
+                    left_coords, right_coords = parse_BND_id(target_chrom, sv_id.split("BND-")[1])
+
+                    if left_coords[0] == chrom:
+                        sv_pos = left_coords[1]
+                        chrom_bis, sv_pos_bis = right_coords[:2]
+                        chrom_bis_nodes = [node for node in target_nodes if node.startswith(chrom_bis)]
+                        left_node_start_bis, right_node_end_bis = get_left_right_ends(chrom_bis_nodes)
+                    
+                    else:
+                        sv_pos = right_coords[1]
+                        chrom_bis, sv_pos_bis = left_coords[:2]
+                        chrom_bis_nodes = [node for node in target_nodes if node.startswith(chrom_bis)]
+                        left_node_start_bis, right_node_end_bis = get_left_right_ends(chrom_bis_nodes)
+                    
+                    if any([min(left_node_start, right_node_end) <= int(sv_pos) <= max(left_node_start, right_node_end), min(left_node_start_bis, right_node_end_bis) <= int(sv_pos_bis) <= max(left_node_start_bis, right_node_end_bis)]):
+                        target_svs.append(":".join([chrom, sv_id]))
+                
+                else:
+                    __, sv_start, sv_end = sv_id.split("-")
+
+                    if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
+                        target_svs.append(":".join([chrom, sv_id]))
+
+        #TODO: handle multi-chrom BNDs
 
     return target_svs
 
