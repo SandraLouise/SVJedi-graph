@@ -36,4 +36,8 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_p
 * `<prefix>_informative_aln.json`
 * `<prefix>_genotype.vcf`  Genotyped SVs set in VCF format.
 
+## Contact
+
+SVJedi is a [Genscale](https://team.inria.fr/genscale/) tool developed by Sandra Romain and Claire Lemaitre. For any bug report or feedback, please use the Issues form.
+
 ---
