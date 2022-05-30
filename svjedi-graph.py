@@ -6,7 +6,7 @@
     Author: Sandra Romain
     Contact: sandra.romain@inria.fr, Inria/Univ Rennes/GenScale, Campus de Beaulieu, 35042 Rennes Cedex, France
     
-    Copyright (C) 2019 Inria
+    Copyright (C) 2022 Inria
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
