@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
 
-"""*******************************************************************************
-    Name: SVJedi-graph
-    Description: SVjedi-graph aims to genotype structural variant with long reads data using a variation graph.
-    Author: Sandra Romain
-    Contact: sandra.romain@inria.fr, Inria/Univ Rennes/GenScale, Campus de Beaulieu, 35042 Rennes Cedex, France
-    
-    Copyright (C) 2019 Inria
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*******************************************************************************"""
-
 import sys
 import argparse
 
@@ -106,7 +87,7 @@ def main(args):
         d_chrom[header] = sequence
 
     for chrom in d_chrom.keys():
-        d_breakpoints[chrom] = []
+        d_breakpoints[chrom] = set()
         d_svs[chrom] = []
 
     #2. Process data
@@ -179,32 +160,44 @@ def main(args):
 
                 else: #SVTYPE = DUP par exemple
                     continue
-                    
+                    print(sv_type)
+    
 
                 #Add breakpoints to list
-                if sv_type != 'BND':
-                    d_breakpoints[chrom].append(start_on_chr)
-                    d_breakpoints[chrom].append(end_on_chr)
+                if sv_type in ['DEL', 'INS', 'INV']:
 
-                else:
+                    if end_on_chr >= len(d_chrom[chrom]) - 1 or start_on_chr >= len(d_chrom[chrom]) - 1:
+                        l_discarded.append(line.rstrip())
+                        continue
+
+                    d_breakpoints[chrom].add(start_on_chr)
+                    d_breakpoints[chrom].add(end_on_chr)
+
+                    d_svs[chrom].append(sv_id)
+
+                elif sv_type == 'BND':
                     left_coords, right_coords = parse_BND_id(chrom, sv_id)
 
                     if left_coords is None:
                         l_discarded.append(line.rstrip())
-                        continue
+                        # continue
+
+                    #Discard inter-chrom BNDs
+                    elif left_coords[0] != right_coords[0]:
+                        l_discarded.append(line.rstrip())
+                        # continue
 
                     else:
                         if left_coords[2] == "-":
-                            d_breakpoints[left_coords[0]].append(int(left_coords[1])-1)
+                            d_breakpoints[left_coords[0]].add(int(left_coords[1])-1)
                         else:
-                            d_breakpoints[left_coords[0]].append(int(left_coords[1]))
+                            d_breakpoints[left_coords[0]].add(int(left_coords[1]))
                         if right_coords[2] == "+":
-                            d_breakpoints[right_coords[0]].append(int(right_coords[1])-1)
+                            d_breakpoints[right_coords[0]].add(int(right_coords[1])-1)
                         else:
-                            d_breakpoints[right_coords[0]].append(int(right_coords[1]))
-                
-                #Add SV to list
-                d_svs[chrom].append(sv_id)
+                            d_breakpoints[right_coords[0]].add(int(right_coords[1]))
+                        
+                        d_svs[chrom].append(sv_id)
 
                 
                 # if prev_chrom is None:
@@ -266,7 +259,18 @@ def main(args):
     for chrom, breakpoints in d_breakpoints.items():
         all_nodes[chrom] = []
 
+        #Convert breakpoint set to breakpoint list + sort list
+        breakpoints = list(breakpoints)
         breakpoints.sort()
+
+        bkpt_to_remove = []
+        for bkpt in breakpoints:
+            if bkpt >= len(d_chrom[chrom]) -1:
+                bkpt_to_remove.append(bkpt)
+        for bkpt in bkpt_to_remove:
+            breakpoints.remove(bkpt)
+
+        bkpt_error = False
 
         # Write NODES, ref PATH and ref LINKS (excluding INS nodes and alternative links)
         nodes_len = []
@@ -289,8 +293,8 @@ def main(args):
                 node_end = len(d_chrom[chrom]) - 1
 
             # INS node added later
-            elif breakpoints[i] == breakpoints[i+1]:
-                continue
+            # elif breakpoints[i] == breakpoints[i+1]:
+            #     continue
 
             else:
                 node_start = breakpoints[i]
@@ -301,6 +305,7 @@ def main(args):
             node_seq = get_ref_seq(d_chrom, chrom, node_start, node_end)
             if node_end - node_start + 1 != len(node_seq):
                 print("Error in node:", chrom, str(node_start), str(node_end), str(len(node_seq)))
+                bkpt_error = True
 
             graph_file.write(format_gfa_node(node_id, node_seq))
             nodes_len.append(str(len(node_seq)))
@@ -308,6 +313,10 @@ def main(args):
         path_nodes = "+,".join(all_nodes[chrom]) + "+"
         path_len = "M,".join(nodes_len) + "M"
         graph_file.write(format_gfa_path(chrom, path_nodes, path_len))
+
+        if bkpt_error:
+            print(chrom)
+            print(breakpoints)
 
         # print(region, all_nodes[chrom])
         # print(path_nodes)
