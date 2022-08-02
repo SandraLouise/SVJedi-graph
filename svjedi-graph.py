@@ -67,22 +67,30 @@ def main(svjg_dir, args):
     ladj = 5000
 
     #### Create variant graph
+    print("Constructing variation graph...")
+
     outGFA = outPrefix + ".gfa"
     c1 = "python3 {}/construct-graph.py -v {} -r {} -o {}".format(svjg_dir, inVCF, inREF, outGFA)
     subprocess.run(c1, shell=True)
 
     #### Map reads on graph
+    print("Mapping reads on graph...")
+
     outGAF = outPrefix + ".gaf"
     aln_log = outGAF + ".log"
     c2 = "GraphAligner -g {} -f {} -a {} -x vg -t {} > {}".format(outGFA, inFQ, outGAF, threads, aln_log)
     subprocess.run(c2, shell=True)
 
     #### Filter alns
+    print("Filtering alignment file...")
+
     outJSON = outPrefix + "_informative_aln.json"
     c3 = "python3 {}/filter-alignments.py -a {} -g {} -p {}".format(svjg_dir, outGAF, outGFA, outPrefix)
     subprocess.run(c3, shell=True)
 
     #### Genotype
+    print("Genotyping SVs...")
+
     outVCF = outPrefix + "_genotype.vcf"
     c4 = "python3 {}/predict-genotype.py -d {} -v {} -o {}".format(svjg_dir, outJSON, inVCF, outVCF)
     subprocess.run(c4, shell=True)
