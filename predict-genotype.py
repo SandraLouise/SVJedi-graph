@@ -323,8 +323,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
     outDecision.close()
 
     print("Genotyped svs: " + str(genotyped_svs))
-    print("Ungenotyped svs: " + str(ungenotyped_svs[0]))
-    print(ungenotyped_svs[1][:10])
+    #print("Ungenotyped svs: " + str(ungenotyped_svs[0]))
+    #print(ungenotyped_svs[1][:10])
 
     return missing_id
 
