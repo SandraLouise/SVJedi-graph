@@ -23,7 +23,7 @@ import sys
 import argparse
 import subprocess
 
-def main(args):
+def main(svjg_dir, args):
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -68,7 +68,7 @@ def main(args):
 
     #### Create variant graph
     outGFA = outPrefix + ".gfa"
-    c1 = "python3 construct-graph.py -v {} -r {} -o {}".format(inVCF, inREF, outGFA)
+    c1 = "python3 {}/construct-graph.py -v {} -r {} -o {}".format(svjg_dir, inVCF, inREF, outGFA)
     subprocess.run(c1, shell=True)
 
     #### Map reads on graph
@@ -79,12 +79,12 @@ def main(args):
 
     #### Filter alns
     outJSON = outPrefix + "_informative_aln.json"
-    c3 = "python3 filter-alignments.py -a {} -g {} -p {}".format(outGAF, outGFA, outPrefix)
+    c3 = "python3 {}/filter-alignments.py -a {} -g {} -p {}".format(svjg_dir, outGAF, outGFA, outPrefix)
     subprocess.run(c3, shell=True)
 
     #### Genotype
     outVCF = outPrefix + "_genotype.vcf"
-    c4 = "python3 predict-genotype.py -d {} -v {} -o {}".format(outJSON, inVCF, outVCF)
+    c4 = "python3 {}/predict-genotype.py -d {} -v {} -o {}".format(svjg_dir, outJSON, inVCF, outVCF)
     subprocess.run(c4, shell=True)
 
 if __name__ == "__main__":
@@ -92,4 +92,5 @@ if __name__ == "__main__":
         sys.exit("Error: missing arguments")
 
     else:
-        main(sys.argv[1:])
+        svjg_dir = sys.argv[0].split('/svjedi-graph.py')[0]
+        main(svjg_dir, sys.argv[1:])
