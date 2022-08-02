@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 
 """*******************************************************************************
-    Adapted from SVJedi/modules/genotype.py v.1.1.4 to work with json input.
-    Git: https://github.com/llecompte/SVJedi
+    Name: SVJedi-graph
+    Description: SVjedi-graph aims to genotype structural variant with long reads data using a variation graph.
+    Authors: Lolita Lecompte, Sandra Romain
+    Contact: sandra.romain@inria.fr, Inria/Univ Rennes/GenScale, Campus de Beaulieu, 35042 Rennes Cedex, France
+    
+    Copyright (C) 2019 Inria
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *******************************************************************************"""
 
 import sys
@@ -80,6 +94,9 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
     getcontext().prec = 28
     outDecision = open(outputDecision, "w")
 
+    genotyped_svs = 0
+    ungenotyped_svs = [0, []]
+
     with open(inputVCF) as inputFile:
         for line in inputFile:
             if line.startswith("##"):
@@ -94,7 +111,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
             else:
                 in_chrom, in_start, _, __, in_type, ___, ____, in_info, *_ = line.rstrip("\n").split("\t")
 
-                ### get SVTYPE ###
+                ### get SVTYPE ###
                 if 'SVTYPE' in in_info:
                     if in_info.split(';')[-1].startswith('SVTYPE='):
                         svtype = in_info.split('SVTYPE=')[1]
@@ -126,7 +143,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                             in_length = abs(int(in_info.split("SVLEN=")[1].split(";")[0]))
                 
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
-                    in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
                     
                 
                 ### get LENGTH for INSERTION ###                    
@@ -141,7 +159,8 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                         in_length = len(in_type) 
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
-                    in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
+                    in_sv = in_chrom + ":" + in_start + "-" + in_start
                 
                 
                 ### get LENGTH for INVERSION ###                
@@ -154,34 +173,68 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                     
                     #if abs(in_length) < 50: continue #focus on svlength of at least 50 bp
                     # in_sv = in_chrom + "_" + in_start + "-" + str(in_length) #define sv id for DEL, INS, INV
-                    in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                    # in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
 
 
                 ### get sv id for TRANSLOCATION ###             
                 elif svtype == 'BND': 
-                    if in_info.startswith("END="):
-                        end = in_info.split("END=")[1].split(';')[0]
-                    elif ";END=" in in_info:
-                        end = in_info.split(";END=")[1].split(';')[0]   
-                    elif "[" in  in_type:
-                        end = in_type.split(':')[1].split('[')[0]
-                    elif "]" in  in_type:
-                        end = in_type.split(':')[1].split(']')[0]
+
+                    in_length = 50
                     
-                    if 'CHR2=' in in_info: 
-                        chr2 = in_info.split('CHR2=')[1].split(';')[0]
-                    elif '[' in in_type:
-                            chr2 = in_type.split(':')[0].split('[')[1]     #ALT[CHR2:POSTION[
-                    elif ']' in in_type:
-                            chr2 = in_type.split(':')[0].split(']')[1]     #ALT]CHR2:POSTION]
+                    # if in_info.startswith("END="):
+                    #     end = in_info.split("END=")[1].split(';')[0]
+                    # elif ";END=" in in_info:
+                    #     end = in_info.split(";END=")[1].split(';')[0]   
+                    # elif "[" in  in_type:
+                    #     end = in_type.split(':')[1].split('[')[0]
+                    # elif "]" in  in_type:
+                    #     end = in_type.split(':')[1].split(']')[0]
+                    
+                    # if 'CHR2=' in in_info: 
+                    #     chr2 = in_info.split('CHR2=')[1].split(';')[0]
+                    # elif '[' in in_type:
+                    #         chr2 = in_type.split(':')[0].split('[')[1]     #ALT[CHR2:POSTION[
+                    # elif ']' in in_type:
+                    #         chr2 = in_type.split(':')[0].split(']')[1]     #ALT]CHR2:POSTION]
+
+                    if "[" in in_type:
+                        alt = list(filter(bool, in_type.split("[")))
+
+                        if ":" in alt[1]:
+                            chr2 = alt[1].split(":")[0]
+                            end = alt[1].split(":")[1]
+                            in_sv = ":".join([in_chrom, in_start]) + "[" + alt[1] + "["
+                        else:
+                            chr2 = alt[0].split(":")[0]
+                            end = alt[0].split(":")[1]
+                            in_sv = "[" + alt[1] + "[" + ":".join([in_chrom, in_start])
+                    
+                    elif "]" in in_type:
+                        alt = list(filter(bool, in_type.split("]")))
+
+                        if ":" in alt[1]:
+                            chr2 = alt[1].split(":")[0]
+                            end = alt[1].split(":")[1]
+                            in_sv = ":".join([in_chrom, in_start]) + "]" + alt[1] + "]"
+                        else:
+                            chr2 = alt[0].split(":")[0]
+                            end = alt[0].split(":")[1]
+                            in_sv = "]" + alt[1] + "]" + ":".join([in_chrom, in_start])
+                    
+                    else:
+                        in_sv = "wrong_format"
+
                             
-                    in_sv = in_chrom + "_" + in_start + "-" + chr2 + "-" + end #define sv id for TRANS
+                    # in_sv = in_chrom + "_" + in_start + "-" + chr2 + "-" + end #define sv id for TRANS
                 
+                else:
+                    in_sv = in_chrom + ":" + in_start + "-" + str(end)
                 
                 #######################################################################################
                 #Asign genotype 
 
-                in_sv = in_chrom + "_" + in_start + "-" + str(end)
+                # in_sv = in_chrom + ":" + in_start + "-" + str(end)
                 if svtype in ('DEL', 'INS', 'INV', 'BND') and in_sv in list(dictReadAtJunction.keys()) and abs(in_length) >= 50:
 
                     #-------------------#
@@ -195,33 +248,39 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
 
                     nbAln = [len(x) for x in allele_alns]
                     genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
+
+                    genotyped_svs += 1
             
                 else: #if svtype different from DEL, INS, INV, BND or if sv not in supported by alignment
 
                     if in_sv not in list(dictReadAtJunction.keys()):
+
+                        ungenotyped_svs[1].append(in_sv)
                         
                         #Try find version pb###############################################################
-                        corr_in_sv = in_chrom + "_" + in_start + "-" + in_start
-                        if corr_in_sv in list(dictReadAtJunction.keys()):
-                            #-------------------#
-                            #Sup. filter alns (to be moved to filter script later)
-                            allele_alns = [[], []]
-                            for a in [0, 1]:
-                                for aln in dictReadAtJunction[corr_in_sv][a]:
-                                    if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
-                                        allele_alns[a].append(aln)
-                            #-------------------#
+                        # corr_in_sv = in_chrom + "_" + in_start + "-" + in_start
+                        # if corr_in_sv in list(dictReadAtJunction.keys()):
+                        #     #-------------------#
+                        #     #Sup. filter alns (to be moved to filter script later)
+                        #     allele_alns = [[], []]
+                        #     for a in [0, 1]:
+                        #         for aln in dictReadAtJunction[corr_in_sv][a]:
+                        #             if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
+                        #                 allele_alns[a].append(aln)
+                        #     #-------------------#
 
-                            nbAln = [len(x) for x in allele_alns]
-                            genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
+                        #     nbAln = [len(x) for x in allele_alns]
+                        #     genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
                         ###################################################################################
 
-                        else:
-                            missing_id.append(in_sv)
+                        # else:
+                        #     missing_id.append(in_sv)
 
                     nbAln = [0,0]
                     genotype = "./."
                     proba = [".",".","."]
+
+                    ungenotyped_svs[0] += 1
 
                     
                 #######################################################################################
@@ -262,6 +321,10 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                     outDecision.write(new_line + "\n")
 
     outDecision.close()
+
+    print("Genotyped svs: " + str(genotyped_svs))
+    print("Ungenotyped svs: " + str(ungenotyped_svs[0]))
+    print(ungenotyped_svs[1][:10])
 
     return missing_id
 
