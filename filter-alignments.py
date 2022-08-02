@@ -276,7 +276,7 @@ def main(args):
 
     with open(output_aln_dict, 'w') as file:
         file.write(json.dumps(dict_of_informative_aln, sort_keys=True, indent=4))
-    print(str(aln_nb), "informative sv-based aln saved")
+    # print(str(aln_nb), "informative sv-based aln saved")
     # print(len(removed_alns), " alns removed")
 
     # print(dict_of_informative_aln)
