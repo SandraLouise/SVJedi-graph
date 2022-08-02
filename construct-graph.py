@@ -67,7 +67,7 @@ def main(args):
         
     else:
         graph_file_name = inputVCF.split("/")[-1].replace(".vcf", "_graph.gfa")
-
+        
 
     #1. Get reference genome sequence
 

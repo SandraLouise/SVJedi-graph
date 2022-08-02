@@ -159,8 +159,6 @@ def main(args):
 
     #2. Reading alignments and filling dictionary of informative alignments
 
-    print("Reading gaf file...")
-
     dict_of_informative_aln = dict()
     list_of_identities = list()
     # dict = {sv_id : [[aln on ref allele], [aln on alt allele]]}
