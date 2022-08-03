@@ -6,7 +6,7 @@ SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF f
 
 ## Installation
 
-SVJedi-graph requires only python and GraphAligner to run. Currently works best with GraphAligner v1.0.12 (https://github.com/maickrau/GraphAligner/releases/tag/v1.0.12). Simplest way to install GraphAligner is with conda.
+SVJedi-graph requires only python (3.8.13 or higher) and GraphAligner to run. Currently works best with GraphAligner v1.0.12 (https://github.com/maickrau/GraphAligner/releases/tag/v1.0.12). Simplest way to install GraphAligner is with conda.
 
 ```bash
 conda install -c bioconda graphaligner=1.0.12
