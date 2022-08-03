@@ -29,32 +29,37 @@ def main(svjg_dir, args):
     parser.add_argument(
         "-v", 
         "--vcf", 
-        metavar="<inputVCF>", 
+        # metavar="<inputVCF>", 
         type=str,
+        help="vcf format",
         required=True)
     parser.add_argument(
         "-r", 
         "--ref", 
-        metavar="<referenceGenome>", 
+        # metavar="<referenceGenome>", 
         type=str, 
+        help="fasta format",
         required=True)
     parser.add_argument(
         "-q", 
         "--reads", 
-        metavar="<queryReads>", 
+        # metavar="<queryReads>", 
         type=str, 
+        help="fastq format",
         required=True)
     parser.add_argument(
         "-p", 
         "--prefix", 
-        metavar="<outFilesPrefix>", 
+        # metavar="<outFilesPrefix>", 
         type=str, 
+        help="prefix of generated files",
         required=True)
     parser.add_argument(
         "-t", 
         "--threads", 
-        metavar="<threadNumber>", 
+        # metavar="<threadNumber>", 
         type=int, 
+        help="number of threads to use for read mapping",
         default=[1])
 
     args = parser.parse_args()
