@@ -114,9 +114,12 @@ def main(args):
                 if line.startswith("#"):
                     region_svs[line[1:].split("\t")[0]] = list(line.rstrip().split("\t")[1].split(";"))
 
+                ###########################
+                #TODO: remplacer par une fonction pour indexer les noeuds (à partir des lignes "S" du gfa) (facilitera les modifs)
+
                 elif line.startswith("P"):
                     region, nodes, __ = line.split("\t")[1:]
-                    chrom = region
+                    # chrom = region
 
                     # Add SVs to dict_SVs
                     # if chrom not in dict_SVs.keys():
@@ -126,11 +129,11 @@ def main(args):
                     # Add nodes and region to which_chrom
                     nodes = extract_nodes(nodes)
                     for node in nodes:
-                        which_chrom[node] = region        
+                        which_chrom[node] = region
 
                     # Add first and last node to start_end_chrom
                     start_end_chrom[region] = [nodes[0], nodes[-1]]
-                
+
                 elif line.startswith("S"):
                     node = line.split("\t")[1]
                     if node[-1] == "a":
@@ -144,6 +147,7 @@ def main(args):
                                 rename_node[node] = new_id
                                 # print(node, n_id, new_id)
                                 break
+                ###########################
         
         with open(gfa_info_dict, 'w') as file:
             gfa_info = {"which_chrom" : which_chrom, "rename_node" : rename_node, "start_end_chrom" : start_end_chrom}
@@ -180,10 +184,10 @@ def main(args):
             multi_chrom = False
 
             #correct ins nodes id
-            for i in range(len(target_nodes)):
-                if target_nodes[i] not in which_chrom.keys():
-                    # target_nodes[i] = rename_node[target_nodes[i]]
-                    which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
+            # for i in range(len(target_nodes)):
+            #     if target_nodes[i] not in which_chrom.keys():
+            #         # target_nodes[i] = rename_node[target_nodes[i]]
+            #         which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
             
             target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
             targets = [target_chrom]
@@ -201,9 +205,9 @@ def main(args):
                 target_chrom = targets
                 #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
 
-            else:
-                if not is_semiglobal_aln(aln, target_nodes, start_end_chrom[target_chrom], d_end):
-                    continue
+            # else:
+            #     if not is_semiglobal_aln(aln, target_nodes, start_end_chrom[target_chrom], d_end):
+            #         continue
                 # print("Passed semiglobal filter:\n", aln)
 
             # Convert path_based aln to sv-based aln
@@ -229,8 +233,7 @@ def main(args):
                     continue
 
                 # BREAKPOINT FILTER
-                if not overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln):
-                    continue
+                overlapped_bkpts = overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln)
                 
                 # print("Passed breakpoint filter")
 
@@ -240,32 +243,33 @@ def main(args):
                 if dict_sv_id not in dict_of_informative_aln.keys():
                     dict_of_informative_aln[dict_sv_id] = [[], []]
 
-                dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
+                for bkpt in overlapped_bkpts:
+                    dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
 
                 if not identity_saved:
                     list_of_identities.append(aln["Aid"])
                     identity_saved = True
             
-    #3. IDENTITY FILTER
-    removed_alns = []
+    # #3. IDENTITY FILTER
+    # removed_alns = []
 
-    # min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
-    # min_id_value = 0.7
-    min_id_value = 0.0
+    # # min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
+    # # min_id_value = 0.7
+    # min_id_value = 0.0
 
-    for sv, allele_alns in dict_of_informative_aln.items():
-        for allele in [0, 1]:
+    # for sv, allele_alns in dict_of_informative_aln.items():
+    #     for allele in [0, 1]:
 
-            curated_alns = []
-            for aln in allele_alns[allele]:
-                identity = float(aln.rstrip().split("\t")[14].split(":")[-1])
+    #         curated_alns = []
+    #         for aln in allele_alns[allele]:
+    #             identity = float(aln.rstrip().split("\t")[14].split(":")[-1])
 
-                if identity > min_id_value:
-                    curated_alns.append(aln)
-                else:
-                    removed_alns.append((aln, allele))
+    #             if identity > min_id_value:
+    #                 curated_alns.append(aln)
+    #             else:
+    #                 removed_alns.append((aln, allele))
 
-            dict_of_informative_aln[sv][allele] = curated_alns
+    #         dict_of_informative_aln[sv][allele] = curated_alns
     
     #Stats
     aln_nb = 0
@@ -429,10 +433,13 @@ def get_breakpoints(sv_id, svtype):
 
 def overlap_breakpoints(bkpts, sv_id, allele, aln_nodes, d_over, aln):
 
-    if any([check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln) for bkpt in bkpts[allele]]):
-        return True
+    over_bkpt = []
 
-    return False
+    for bkpt in bkpts[allele]:
+        if check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
+            over_bkpt.append(bkpt)
+
+    return over_bkpt
 
 def check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
     bkpt_leftChrom, bkpt_leftCoord, bkpt_leftStrand = bkpt[0].split(":")

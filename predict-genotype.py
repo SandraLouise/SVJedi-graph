@@ -36,7 +36,9 @@ def main(args):
     
     parser.add_argument("-o", "--output", metavar="<output>", nargs=1, help="output file")
 
-    parser.add_argument("-i", "--minid", metavar="<min identity>", nargs=1, type=float, help="minimum pct of identity")
+    # parser.add_argument("-i", "--minid", metavar="<min identity>", nargs=1, type=float, help="minimum pct of identity")
+
+    parser.add_argument("-e", "--err", nargs=1, type=float, help="allele error probability")
 
     parser.add_argument("-ladj", metavar="<allele_size>", nargs=1, type=int, default=[5000], help="Sequence allele adjacencies at each side of the SV")
 
@@ -57,10 +59,15 @@ def main(args):
     else:
         output = args.output[0]
     
-    if args.minid is not None:
-        min_id = args.minid[0]
+    # if args.minid is not None:
+    #     min_id = args.minid[0]
+    # else:
+    #     min_id = 0
+    
+    if args.err is not None:
+        e = args.err[0]
     else:
-        min_id = 0
+        e = 0.00005
 
     vcffile = args.vcf
     aln_dict_file = args.aln[0]
@@ -72,7 +79,7 @@ def main(args):
 
     missing_id = []
 
-    missing_id = decision_vcf(dict_of_informative_aln, vcffile, output, min_support, min_id, l_adj, missing_id)
+    missing_id = decision_vcf(dict_of_informative_aln, vcffile, output, min_support, e, l_adj, missing_id)
 
     # print(len(missing_id))
     # print(missing_id[:10])
@@ -89,7 +96,7 @@ def get_info(info, label):
     else:
         return info.split(label.join([";", "="]))[1].split(";")[0]
 
-def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id, l_adj, missing_id):
+def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, e, l_adj, missing_id):
     """ Output in VCF format and take genotype decision """
     getcontext().prec = 28
     outDecision = open(outputDecision, "w")
@@ -238,16 +245,15 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
                 if svtype in ('DEL', 'INS', 'INV', 'BND') and in_sv in list(dictReadAtJunction.keys()) and abs(in_length) >= 50:
 
                     #-------------------#
-                    #Sup. filter alns (to be moved to filter script later)
                     allele_alns = [[], []]
                     for a in [0, 1]:
                         for aln in dictReadAtJunction[in_sv][a]:
-                            if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
-                                allele_alns[a].append(aln)
+                            # if float(aln.split("\tid:f:")[1].split("\t")[0]) >= min_id:
+                            allele_alns[a].append(aln)
                     #-------------------#
 
                     nbAln = [len(x) for x in allele_alns]
-                    genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj)
+                    genotype, proba = likelihood(nbAln, svtype, in_length, minNbAln, l_adj, e)
 
                     genotyped_svs += 1
             
@@ -328,18 +334,19 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, min_id,
 
     return missing_id
 
-def likelihood(all_count, svtype, svlength, minNbAln, l_adj):
+def likelihood(all_count, svtype, svlength, minNbAln, l_adj, e):
     """ Compute likelihood """
     
     unbalanced_sv = ("DEL", "INS")
     if svtype in unbalanced_sv:
-        c1, c2 = allele_normalization(all_count, svtype, svlength, l_adj)  # allelic sequence normalization for unbalanced SV
+        c1, c2 = allele_normalization(all_count, svtype)  # allelic sequence normalization for unbalanced SV
+        # c1, c2 = all_count
     else:
         c1, c2 = all_count
     
     rc1 = int(round(c1,0))
     rc2 = int(round(c2,0))
-    e = 0.00005 #sequencing err
+    # e = 0.00005 #sequencing err
 
     lik0 = Decimal(c1*math.log10(1-e)) + Decimal(c2*math.log10(e)) 
     lik1 = Decimal((c1+c2)*math.log10(1/2)) 
@@ -373,19 +380,32 @@ def likelihood(all_count, svtype, svlength, minNbAln, l_adj):
             
     return geno, prob
 
-def allele_normalization(nb_aln_per_allele, svtype, svlength, l_adj):
-    ''' Allele length normalization '''
-    if svlength > (2*l_adj): svlength = 2*l_adj #for upper bound, if case of sv size > 2XLadj, only 2 sequences of 2Ladj are represented
+# def allele_normalization(nb_aln_per_allele, svtype, svlength, l_adj):
+#     ''' Allele length normalization '''
+#     if svlength > (2*l_adj): svlength = 2*l_adj #for upper bound, if case of sv size > 2XLadj, only 2 sequences of 2Ladj are represented
     
+#     if svtype == "DEL":
+#         nb_aln_longest_allele_seq = nb_aln_per_allele[0]
+#         if nb_aln_longest_allele_seq > 0:
+#             nb_aln_per_allele[0] = round(nb_aln_longest_allele_seq * (2*l_adj) / ((2*l_adj) + svlength), 3)
+    
+#     elif svtype == "INS":
+#         nb_aln_longest_allele_seq = nb_aln_per_allele[1]
+#         if nb_aln_longest_allele_seq > 0:
+#             nb_aln_per_allele[1] = round(nb_aln_longest_allele_seq * (2*l_adj) / ((2*l_adj) + svlength), 3)
+    
+#     return nb_aln_per_allele
+
+def allele_normalization(nb_aln_per_allele, svtype):
+    ''' Allele breakpoint number normalization '''
     if svtype == "DEL":
-        nb_aln_longest_allele_seq = nb_aln_per_allele[0]
-        if nb_aln_longest_allele_seq > 0:
-            nb_aln_per_allele[0] = round(nb_aln_longest_allele_seq * (2*l_adj) / ((2*l_adj) + svlength), 3)
-    
+        allele_2bkpt = 0
     elif svtype == "INS":
-        nb_aln_longest_allele_seq = nb_aln_per_allele[1]
-        if nb_aln_longest_allele_seq > 0:
-            nb_aln_per_allele[1] = round(nb_aln_longest_allele_seq * (2*l_adj) / ((2*l_adj) + svlength), 3)
+        allele_2bkpt = 1
+
+    nb_aln_2bkpt_allele = nb_aln_per_allele[allele_2bkpt]
+    if nb_aln_2bkpt_allele > 0:
+        nb_aln_per_allele[allele_2bkpt] = round(nb_aln_2bkpt_allele / 2, 1)
     
     return nb_aln_per_allele
 
