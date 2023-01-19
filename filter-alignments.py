@@ -167,6 +167,7 @@ def main(args):
     list_of_identities = list()
     # dict = {sv_id : [[aln on ref allele], [aln on alt allele]]}
 
+
     with open(gaf_file) as aln_file:
         for line in aln_file:
 
@@ -189,14 +190,15 @@ def main(args):
             #         # target_nodes[i] = rename_node[target_nodes[i]]
             #         which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
             
-            target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
+            # target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
+            target_chrom = target_nodes[0].split(":")[0]
             targets = [target_chrom]
                 
             for node in target_nodes[1:]:
-                if node not in which_chrom.keys():
-                    # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
-                    continue
-                if which_chrom[node] != target_chrom:
+                # if node not in which_chrom.keys():
+                #     # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
+                #     continue
+                if node.split(":")[0] != target_chrom:
                     multi_chrom = True
                     targets.append(which_chrom[node])
                     
@@ -214,11 +216,13 @@ def main(args):
             target_svs = get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs)
             # print(target_chrom)
 
-            # if len(target_svs) != 0:
-            #     print(line)
-            #     print(target_svs)
 
             for sv_id in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
+                
+                #=====================DEBUG=======================#
+                # if sv_id != sv_to_check:
+                #     continue
+                #=====================DEBUG=======================#
 
                 sv_type = sv_id.split(":")[1].split("-")[0]
 
@@ -228,6 +232,10 @@ def main(args):
                 #identify supported allele
                 allele = get_allele(breakpoints, aln["Tid"], target_nodes)
                 # print("Allele: "+str(allele))
+
+                #=====================DEBUG=======================#
+                # print(target_nodes, allele)
+                #=====================DEBUG=======================#
 
                 if allele is None:
                     continue
@@ -249,7 +257,8 @@ def main(args):
                 if not identity_saved:
                     list_of_identities.append(aln["Aid"])
                     identity_saved = True
-            
+
+
     # #3. IDENTITY FILTER
     # removed_alns = []
 
@@ -384,24 +393,32 @@ def get_breakpoints(sv_id, svtype):
 
         if svtype == "DEL":
             # end = str(int(pos) + int(end) + 1)
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward])), 
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward])), 
+            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward])),
+                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward])),
                         (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward]))] #left coord, right coord
+                        (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #left coord, right coord
+                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
+                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward]))
+                        #removed: (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))
             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward])), 
-                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])), 
+                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward])),
+                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward])),
+                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
+                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
                         (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward]))]
+                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward]))
+                        #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
+                        #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
+                        #removed: (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward])
         
         elif svtype == "INS":
             end = str(int(pos) + 1)
-            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward])), 
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))] #left coord, right coord
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1)+"a", forward])), 
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(pos)+1)+"a", forward])), 
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos+"a", forward])), 
-                        (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward])), 
-                        (":".join([chrom, end+"a", forward]), ":".join([chrom, str(int(end)-1), forward]))]
+            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
+            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end+"a", forward])), 
+                        (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward]))]
+                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end+"a", forward]))
+                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos+"a", forward]))
+                        #removed: (":".join([chrom, end+"a", forward]), ":".join([chrom, str(int(end)-1), forward]))
         
         elif svtype == "INV":
             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 

@@ -83,7 +83,7 @@ def main(svjg_dir, args):
 
     outGAF = outPrefix + ".gaf"
     aln_log = outGAF + ".log"
-    c2 = "GraphAligner -g {} -f {} -a {} -x vg -t {} > {}".format(outGFA, inFQ, outGAF, threads, aln_log)
+    c2 = "minigraph -x lr -t{} {} {} > {}".format(threads, outGFA, inFQ, outGAF)
     subprocess.run(c2, shell=True)
 
     #### Filter alns
