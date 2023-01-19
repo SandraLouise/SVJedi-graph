@@ -1,21 +1,26 @@
 # SVJedi-graph : long-read SV genotyper with variant graph
 
-SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF file, which is then used as a base to map long reads on with GraphAligner[^1].
+SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF file, which is then used as a base to map long reads on with minigraph[^1].
 
-[^1]: Rautiainen, M., Marschall, T. GraphAligner: rapid and versatile sequence-to-graph alignment. Genome Biol 21, 253 (2020). https://doi.org/10.1186/s13059-020-02157-2.
+[^1]: Li, H., Feng, X. & Chu, C. The design and construction of reference pangenome graphs with minigraph. Genome Biol 21, 265 (2020). https://doi.org/10.1186/s13059-020-02168-z
 
 ## Installation
 
-SVJedi-graph requires only python (3.8.13 or higher) and GraphAligner to run. Currently works best with GraphAligner v1.0.12 (https://github.com/maickrau/GraphAligner/releases/tag/v1.0.12). Simplest way to install GraphAligner is with conda.
+SVJedi-graph requires only python (3.8.13 or higher) and minigraph to run.
+
+### With Conda
 
 ```bash
-conda install -c bioconda graphaligner=1.0.12
+conda install -c bioconda svjedi-graph
+```
+
+### Or
+
+```bash
 git clone https://gitlab.inria.fr/sromain/svjedi-graph.git
 ```
 
 ## Run
-
-Make sure to activate your environment if you installed GraphAligner _via_ Conda.
 
 ```bash
 python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
@@ -32,8 +37,8 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_p
 ### Output files
 
 * `<prefix>.gfa`           Variation graph in [GFA format](https://github.com/GFA-spec/GFA-spec).
-* `<prefix>.gaf`           Mapping results from GraphAligner in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf).
-* `<prefix>_informative_aln.json`
+* `<prefix>.gaf`           Mapping results from minigraph in [GAF format](https://github.com/lh3/gfatools/blob/master/doc/rGFA.md#the-graph-alignment-format-gaf).
+* `<prefix>_informative_aln.json`   Json dictionnary of read supports for each input SV's alleles.
 * `<prefix>_genotype.vcf`  Genotyped SVs set in VCF format.
 
 ## Contact
