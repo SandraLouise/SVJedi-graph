@@ -1,5 +1,7 @@
 # SVJedi-graph : long-read SV genotyper with variant graph
 
+[![License](http://img.shields.io/:license-affero-blue.svg)](http://www.gnu.org/licenses/agpl-3.0.en.html) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](https://anaconda.org/bioconda/svjedi-graph)
+
 SVJedi-graph constructs a variation graph to represent a set of SVs from a VCF file, which is then used as a base to map long reads on with minigraph[^1].
 
 [^1]: Li, H., Feng, X. & Chu, C. The design and construction of reference pangenome graphs with minigraph. Genome Biol 21, 265 (2020). https://doi.org/10.1186/s13059-020-02168-z
