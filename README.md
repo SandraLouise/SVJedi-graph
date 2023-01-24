@@ -39,7 +39,7 @@ python3 svjedi-graph.py -v test_data/tiny_DEL.vcf -r test_data/tiny_GRCh37_chr22
 The genotyped VCF file obtained (`tiny_DEL_genotype.vcf`) should be identical as the one in the `test_data` folder.
 
 
-### Parameters
+### Parameters
 
 
 * `-v`  VCF file containing the set of SVs to genotype.
