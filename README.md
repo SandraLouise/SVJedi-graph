@@ -28,13 +28,26 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph.git
 python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
 ``` 
 
+
+### Test with a small dataset
+
+
+```bash
+python3 svjedi-graph.py -v test_data/tiny_DEL.vcf -r test_data/tiny_GRCh37_chr22.fa -q tiny_sim_reads.fastq.gz -p tiny_DEL [ -t <threads> ]
+``` 
+
+The genotyped VCF file obtained (`tiny_DEL_genotype.vcf`) should be identical as the one in the `test_data` folder.
+
+
 ### Parameters
+
 
 * `-v`  VCF file containing the set of SVs to genotype.
 * `-r`  FASTA file containing the reference genome (on which the SVs have been identified).
 * `-q`  FASTQ file containing the long reads used to genotype.
 * `-p`  Prefix of output files.
 * `-t`  Number of threads to use for the mapping step.
+
 
 ### Output files
 
