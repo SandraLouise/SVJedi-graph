@@ -25,7 +25,7 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph.git
 ## Run
 
 ```bash
-python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
+./svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
 ``` 
 
 
@@ -33,7 +33,7 @@ python3 svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_p
 
 
 ```bash
-python3 svjedi-graph.py -v test_data/tiny_DEL.vcf -r test_data/tiny_GRCh37_chr22.fa -q tiny_sim_reads.fastq.gz -p tiny_DEL
+./svjedi-graph.py -v test_data/tiny_DEL.vcf -r test_data/tiny_GRCh37_chr22.fa -q tiny_sim_reads.fastq.gz -p tiny_DEL
 ``` 
 
 The genotyped VCF file obtained (`tiny_DEL_genotype.vcf`) should be identical as the one in the `test_data` folder.
