@@ -6,7 +6,7 @@ SVJedi-graph is a structural variation (SV) genotyper for long read data. It tak
 
 SVjedi-graph is based on a representation of the genome and the different SV alleles in a variation graph. After building this variation graph from the reference genome sequence and the input variant file, long reads are mapped on this graph using minigraph[^1]. Then it estimates the genotype of each variant in a given individual sample based on allele-specific alignment counts. 
 
-Currently, SVJedi-graph can genotype five types of SVs: deletions, insertions, duplications, inversions and intra-chromosomal translocations.
+Currently, SVJedi-graph can genotype five types of SVs: deletions, insertions, duplications, inversions and intra-chromosomal translocations. (support for inter-chromosomal translocations is in progress)
 
 
 [^1]: Li, H., Feng, X. & Chu, C. The design and construction of reference pangenome graphs with minigraph. Genome Biol 21, 265 (2020). https://doi.org/10.1186/s13059-020-02168-z
@@ -38,8 +38,7 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph.git
 
 ### Input VCF requirements
 
-The SVTYPE tag must be present in the INFO field (SVTYPE=DEL or SVTYPE=INS or SVTYPE=INV or SVTYPE=BND). Insertions need to be sequence-resolved with the full inserted sequence characterized and reported in the ALT field of the VCF file. As duplications
-are a special case of insertions, SVJedi-graph supports also duplications, as long as their duplicated sequence is characterized and reported similarly to insertions. More details are given in [SV representation in VCF](#SV-representation-in-VCF).
+For all variants, the `SVTYPE` tag must be present in the `INFO` field (`SVTYPE=DEL` or `SVTYPE=INS` or `SVTYPE=INV` or `SVTYPE=BND`). Insertions need to be sequence-resolved with the full inserted sequence characterized and reported in the ALT field of the VCF file. As duplications are a special case of insertions, SVJedi-graph supports also duplications, as long as their duplicated sequence is characterized and reported similarly to insertions. More details are given in [SV representation in VCF](#SV-representation-in-VCF).
 
 
 ### Test with a small dataset
