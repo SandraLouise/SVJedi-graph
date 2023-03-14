@@ -114,17 +114,9 @@ def main(args):
                 if line.startswith("#"):
                     region_svs[line[1:].split("\t")[0]] = list(line.rstrip().split("\t")[1].split(";"))
 
-                ###########################
-                #TODO: remplacer par une fonction pour indexer les noeuds (à partir des lignes "S" du gfa) (facilitera les modifs)
-
                 elif line.startswith("P"):
                     region, nodes, __ = line.split("\t")[1:]
                     # chrom = region
-
-                    # Add SVs to dict_SVs
-                    # if chrom not in dict_SVs.keys():
-                    #     dict_SVs[chrom] = []
-                    # dict_SVs[chrom].extend(region.split("_")[2:])
 
                     # Add nodes and region to which_chrom
                     nodes = extract_nodes(nodes)
@@ -184,20 +176,11 @@ def main(args):
             # SEMI-GLOBALITY FILTER
             multi_chrom = False
 
-            #correct ins nodes id
-            # for i in range(len(target_nodes)):
-            #     if target_nodes[i] not in which_chrom.keys():
-            #         # target_nodes[i] = rename_node[target_nodes[i]]
-            #         which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
-            
-            # target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
             target_chrom = target_nodes[0].split(":")[0]
             targets = [target_chrom]
                 
             for node in target_nodes[1:]:
-                # if node not in which_chrom.keys():
-                #     # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
-                #     continue
+
                 if node.split(":")[0] != target_chrom:
                     multi_chrom = True
                     targets.append(which_chrom[node])
@@ -207,43 +190,23 @@ def main(args):
                 target_chrom = targets
                 #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
 
-            # else:
-            #     if not is_semiglobal_aln(aln, target_nodes, start_end_chrom[target_chrom], d_end):
-            #         continue
-                # print("Passed semiglobal filter:\n", aln)
-
             # Convert path_based aln to sv-based aln
             target_svs = get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs)
-            # print(target_chrom)
-
 
             for sv_id in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
-                
-                #=====================DEBUG=======================#
-                # if sv_id != sv_to_check:
-                #     continue
-                #=====================DEBUG=======================#
 
                 sv_type = sv_id.split(":")[1].split("-")[0]
 
                 breakpoints = get_breakpoints(sv_id, sv_type)
-                # print(breakpoints)
 
                 #identify supported allele
                 allele = get_allele(breakpoints, aln["Tid"], target_nodes)
-                # print("Allele: "+str(allele))
-
-                #=====================DEBUG=======================#
-                # print(target_nodes, allele)
-                #=====================DEBUG=======================#
 
                 if allele is None:
                     continue
 
                 # BREAKPOINT FILTER
                 overlapped_bkpts = overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln)
-                
-                # print("Passed breakpoint filter")
 
                 # Add aln to dict and save identity
                 dict_sv_id = format_dict_sv_id(sv_id, sv_type)
@@ -259,38 +222,8 @@ def main(args):
                     identity_saved = True
 
 
-    # #3. IDENTITY FILTER
-    # removed_alns = []
-
-    # # min_id_value = round(stats.quantiles(list_of_identities, n=4)[0], 3)
-    # # min_id_value = 0.7
-    # min_id_value = 0.0
-
-    # for sv, allele_alns in dict_of_informative_aln.items():
-    #     for allele in [0, 1]:
-
-    #         curated_alns = []
-    #         for aln in allele_alns[allele]:
-    #             identity = float(aln.rstrip().split("\t")[14].split(":")[-1])
-
-    #             if identity > min_id_value:
-    #                 curated_alns.append(aln)
-    #             else:
-    #                 removed_alns.append((aln, allele))
-
-    #         dict_of_informative_aln[sv][allele] = curated_alns
-    
-    #Stats
-    aln_nb = 0
-    for sv in dict_of_informative_aln:
-        aln_nb += len(dict_of_informative_aln[sv][0]) + len(dict_of_informative_aln[sv][1])
-
     with open(output_aln_dict, 'w') as file:
         file.write(json.dumps(dict_of_informative_aln, sort_keys=True, indent=4))
-    # print(str(aln_nb), "informative sv-based aln saved")
-    # print(len(removed_alns), " alns removed")
-
-    # print(dict_of_informative_aln)
 
 
 
@@ -331,12 +264,30 @@ def get_allele(bkpts, path, nodes):
                 chr2, pos2, orient2 = bkpt[1].split(":")
 
                 # Check if bkpt link in aln path
-                left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
-                right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
+                ## Left node
+                if orient1 == ">":
+                    left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
+                else:
+                    left = all([nodes[i].startswith(chr1), get_node_start(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
+
+                ## Right node
+                if orient2 == ">":
+                    right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
+                else:
+                    right = all([nodes[i+1].startswith(chr2), get_node_end(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
 
                 # Check in bkpt link in aln path (reverse)
-                left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
-                right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
+                ## Left node
+                if orient1 == ">":
+                    left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
+                else:
+                    left_rev = all([nodes[i+1].startswith(chr1), get_node_start(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
+                
+                ## Right node
+                if orient2 == ">":
+                    right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
+                else:
+                    right_rev = all([nodes[i].startswith(chr2), get_node_end(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
 
                 if (left and right) or (left_rev and right_rev):
                     return allele
@@ -367,16 +318,6 @@ def format_dict_sv_id(graph_sv_id, sv_type):
     # print(graph_sv_id)
 
     return graph_sv_id.replace(sv_type + "-", "")
-    
-    # if sv_type in ["DEL", "INS", "INV"]:
-
-    #     chrom, info = graph_sv_id.split(":")
-    #     sv_type, pos, end = info.split("-")
-
-    #     return ":".join([chrom, "-".join([pos, end])])
-
-    # elif sv_type == "BND":
-    #     return ""
 
 def get_breakpoints(sv_id, svtype):
     '''Returns all breakpoints coordinates (as a list of one duple per bkpt) for a SV (sorted by allele)'''
@@ -392,41 +333,21 @@ def get_breakpoints(sv_id, svtype):
         __, pos, end = info.split("-")
 
         if svtype == "DEL":
-            # end = str(int(pos) + int(end) + 1)
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward])),
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward])),
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #left coord, right coord
-                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
-                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward]))
-                        #removed: (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))
+            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward]))]
             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward])),
-                        (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward])),
-                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward]))]
-                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward]))
-                        #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
-                        #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
-                        #removed: (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward])
+                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))]
         
         elif svtype == "INS":
             end = str(int(pos) + 1)
-            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
+            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))]
             bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end+"a", forward])), 
                         (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward]))]
-                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end+"a", forward]))
-                        #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos+"a", forward]))
-                        #removed: (":".join([chrom, end+"a", forward]), ":".join([chrom, str(int(end)-1), forward]))
         
         elif svtype == "INV":
             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                        (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), reverse])), 
-                        (":".join([chrom, str(int(end)-1), reverse]), ":".join([chrom, end, forward])),
-                        (":".join([chrom, end, reverse]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
+                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))]
+            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, reverse])), 
+                        (":".join([chrom, str(int(pos)+1), reverse]), ":".join([chrom, str(int(end)+1), forward]))]
 
     else:
         chrom, bnd_id_p1, bnd_id_p2 = sv_id.split(":")
@@ -499,11 +420,8 @@ def check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
     #Forward alignment
     if aln_nodes.index(bkpt_leftNode) < aln_nodes.index(bkpt_rightNode):
         left_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_start >= d_over
-        # if sum(get_node_len(node) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_left >= d_over:
-        #     left_overlap = True
         right_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
-        # if sum(get_node_len(node) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_right >= d_over:
-        #     right_overlap = True
+
     
     #Reverse alignment
     else:
@@ -566,8 +484,6 @@ def get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs):
 
             else:
                 __, sv_start, sv_end = sv_id.split("-")
-                # if sv_type in ["DEL", "INS"]:
-                #     sv_end = int(sv_start) + int(sv_end)
 
             if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
                 target_svs.append(":".join([target_chrom, sv_id])) #add chrom to id for later save in aln dict
