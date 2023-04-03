@@ -6,7 +6,7 @@
     Author: Sandra Romain
     Contact: sandra.romain@inria.fr, Inria/Univ Rennes/GenScale, Campus de Beaulieu, 35042 Rennes Cedex, France
     
-    Copyright (C) 2019 Inria
+    Copyright (C) 2022 Inria
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -49,24 +49,24 @@ def main(args):
         required=False
     )
 
-    parser.add_argument(
-        "-L", 
-        "--ladj", metavar="<len_adjacent_seq>", nargs=1, 
-        required=False, 
-        default=5000
-    )
+    # parser.add_argument(
+    #     "-L", 
+    #     "--ladj", metavar="<len_adjacent_seq>", nargs=1, 
+    #     required=False, 
+    #     default=5000
+    # )
     parser.add_argument(
         "-O", 
         "--dover", metavar="<min_breakpoint_overlap>", nargs=1, 
         required=False, 
         default=100
     )
-    parser.add_argument(
-        "-E", 
-        "--dend", metavar="<max_dist_semiglobal>", nargs=1, 
-        required=False, 
-        default=100
-    )
+    # parser.add_argument(
+    #     "-E", 
+    #     "--dend", metavar="<max_dist_semiglobal>", nargs=1, 
+    #     required=False, 
+    #     default=100
+    # )
 
     parser.add_argument(
         "-o", 
@@ -96,10 +96,22 @@ def main(args):
 
     gfa_file = args.gfa[0]
     gaf_file = args.gaf[0]
-    l_adj = args.ladj
+    # l_adj = args.ladj
     d_over = args.dover
-    d_end = args.dend
+    # d_end = args.dend
 
+    #=========================================================
+    # Load graph edges - SVs association
+    #=========================================================
+
+    with open("svs_edges.json", "r") as link_sv_json:
+        d_link_sv = json.load(link_sv_json)
+        # key = link_id = "left_node_id@strand@right_node_id@strand"
+        # value = list((sv_id, allele))
+
+    #=========================================================
+    # Load gfa
+    #=========================================================
 
     if args.gfainfo is None:
         #1. Listing SVs to genotype
@@ -109,14 +121,24 @@ def main(args):
         start_end_chrom = {}
         rename_node = {}
 
+        alt_node_len = {}
+
         with open(gfa_file, "r") as graph_file:
             for line in graph_file:
                 if line.startswith("#"):
                     region_svs[line[1:].split("\t")[0]] = list(line.rstrip().split("\t")[1].split(";"))
 
+                ###########################
+                #TODO: remplacer par une fonction pour indexer les noeuds (à partir des lignes "S" du gfa) (facilitera les modifs)
+
                 elif line.startswith("P"):
                     region, nodes, __ = line.split("\t")[1:]
                     # chrom = region
+
+                    # Add SVs to dict_SVs
+                    # if chrom not in dict_SVs.keys():
+                    #     dict_SVs[chrom] = []
+                    # dict_SVs[chrom].extend(region.split("_")[2:])
 
                     # Add nodes and region to which_chrom
                     nodes = extract_nodes(nodes)
@@ -129,6 +151,10 @@ def main(args):
                 elif line.startswith("S"):
                     node = line.split("\t")[1]
                     if node[-1] == "a":
+                        
+                        # Save node length
+                        alt_node_len[node] = len(line.rstrip().split("\t")[2])
+
                         for n_id in list(which_chrom.keys()):
                             if n_id.startswith(node[:-1]):
                                 which_chrom[node] = which_chrom[n_id]
@@ -173,59 +199,136 @@ def main(args):
             if len(target_nodes) < 2:
                 continue
             
-            # SEMI-GLOBALITY FILTER
-            multi_chrom = False
+            #===================================================================
 
-            target_chrom = target_nodes[0].split(":")[0]
-            targets = [target_chrom]
-                
-            for node in target_nodes[1:]:
+            target_links = get_aln_links(aln["Tid"], target_nodes)
 
-                if node.split(":")[0] != target_chrom:
-                    multi_chrom = True
-                    targets.append(which_chrom[node])
+            target_svs = []
+
+            # Get overlapped SVs for each link in the alignment
+            for link in target_links:
+
+                link_key = get_link_key(link)
+
+                # If the read is reverse
+                if link_key not in d_link_sv:
+
+                    rev_link = reverse_link(link)
+                    link_key = get_link_key(rev_link)
+
+                # Check each overlapped SV
+                for (sv_id, allele) in d_link_sv[link_key]:
                     
-            # Inter-chromosomal BNDs
-            if multi_chrom:
-                target_chrom = targets
-                #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
+                    # BREAKPOINT FILTER
+                    if check_bkpt_overlap(link, target_nodes, d_over, aln, alt_node_len):
+                        
+                        # Add aln to dict
+                        sv_type = sv_id.split(":")[1].split("-")[0]
+                        dict_sv_id = format_dict_sv_id(sv_id, sv_type)
 
-            # Convert path_based aln to sv-based aln
-            target_svs = get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs)
+                        if dict_sv_id not in dict_of_informative_aln.keys():
+                            dict_of_informative_aln[dict_sv_id] = [[], []]
 
-            for sv_id in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
+                        dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
 
-                sv_type = sv_id.split(":")[1].split("-")[0]
+            #===================================================================
+            # OLD CODE
 
-                breakpoints = get_breakpoints(sv_id, sv_type)
+                    # if (sv_id, allele) not in target_svs:
+                    #     target_svs.append((sv_id, allele))
 
-                #identify supported allele
-                allele = get_allele(breakpoints, aln["Tid"], target_nodes)
+                    
+            # # SEMI-GLOBALITY FILTER
+            # multi_chrom = False
 
-                if allele is None:
-                    continue
+            # #correct ins nodes id
+            # # for i in range(len(target_nodes)):
+            # #     if target_nodes[i] not in which_chrom.keys():
+            # #         # target_nodes[i] = rename_node[target_nodes[i]]
+            # #         which_chrom[target_nodes[i]] = which_chrom[rename_node[target_nodes[i]]]
+            
+            # # target_chrom = which_chrom[target_nodes[0]] # target_chrom = chrom_id
+            # target_chrom = target_nodes[0].split(":")[0]
+            # targets = [target_chrom]
+                
+            # for node in target_nodes[1:]:
+            #     # if node not in which_chrom.keys():
+            #     #     # print("Region of {} not found. Path is: {}".format(node, aln["Tid"]))
+            #     #     continue
+            #     if node.split(":")[0] != target_chrom:
+            #         multi_chrom = True
+            #         targets.append(which_chrom[node])
+                    
+            # # Inter-chromosomal BNDs
+            # if multi_chrom:
+            #     target_chrom = targets
+            #     #TODO: handle multi target-regions (needed for TRANSLOCATIONS)
 
-                # BREAKPOINT FILTER
-                overlapped_bkpts = overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln)
+            # # else:
+            # #     if not is_semiglobal_aln(aln, target_nodes, start_end_chrom[target_chrom], d_end):
+            # #         continue
+            #     # print("Passed semiglobal filter:\n", aln)
 
-                # Add aln to dict and save identity
-                dict_sv_id = format_dict_sv_id(sv_id, sv_type)
+            # # Convert path_based aln to sv-based aln
+            # target_svs = get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs)
+            # # print(target_chrom)
 
-                if dict_sv_id not in dict_of_informative_aln.keys():
-                    dict_of_informative_aln[dict_sv_id] = [[], []]
 
-                for bkpt in overlapped_bkpts:
-                    dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
+            # for (sv_id, allele) in target_svs: #sv_id = sv_type + "-" + pos + "-" + end
+                
+            #     #=====================DEBUG=======================#
+            #     # if sv_id != sv_to_check:
+            #     #     continue
+            #     #=====================DEBUG=======================#
 
-                if not identity_saved:
-                    list_of_identities.append(aln["Aid"])
-                    identity_saved = True
+            #     sv_type = sv_id.split(":")[1].split("-")[0]
 
+            #     breakpoints = get_breakpoints(sv_id, sv_type)
+            #     # print(sv_id, breakpoints)
+
+            #     # #identify supported allele
+            #     # allele = get_allele(breakpoints, aln["Tid"], target_nodes)
+            #     # # print("Allele: "+str(allele))
+
+            #     # #=====================DEBUG=======================#
+            #     # # print(target_nodes, allele)
+            #     # #=====================DEBUG=======================#
+
+            #     # if allele is None:
+            #     #     continue
+
+            #     # BREAKPOINT FILTER
+            #     overlapped_bkpts = overlap_breakpoints(breakpoints, sv_id, allele, target_nodes, d_over, aln)
+                
+            #     # print("Passed breakpoint filter")
+
+            #     # Add aln to dict
+            #     dict_sv_id = format_dict_sv_id(sv_id, sv_type)
+
+            #     if dict_sv_id not in dict_of_informative_aln.keys():
+            #         dict_of_informative_aln[dict_sv_id] = [[], []]
+
+            #     for bkpt in overlapped_bkpts:
+            #         dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
+
+                # if not identity_saved:
+                #     list_of_identities.append(aln["Aid"])
+                #     identity_saved = True
+
+    #Stats
+    aln_nb = 0
+    for sv in dict_of_informative_aln:
+        aln_nb += len(dict_of_informative_aln[sv][0]) + len(dict_of_informative_aln[sv][1])
 
     with open(output_aln_dict, 'w') as file:
         file.write(json.dumps(dict_of_informative_aln, sort_keys=True, indent=4))
+    # print(str(aln_nb), "informative sv-based aln saved")
+    # print(len(removed_alns), " alns removed")
 
+    # print(dict_of_informative_aln)
 
+def get_link_key(link_id):
+    return "@".join(link_id)
 
 def read_gaf_line(line):
     Qid, Qlen, Qs, Qe = line.split("\t")[:4]
@@ -242,6 +345,33 @@ def read_gaf_line(line):
         d["Aid"] = d["Am"] / d["Alen"]
         
     return d
+
+def get_aln_links(path, nodes):
+
+    # Get nodes strands
+    strands = [None]*len(nodes)
+    for i in range(len(nodes)):
+
+        if path.split(nodes[i])[0][-1] == ">":
+            strands[i] = "+"
+        else:
+            strands[i] = "-"
+
+    # Get aln links
+    links = [None]*(len(nodes)-1)
+
+    for i in range(1, len(nodes)):
+        link_id = (nodes[i-1], strands[i-1], nodes[i], strands[i])
+
+        links[i-1] = link_id
+
+    return links
+
+def reverse_link(link):
+
+    rev_strand = { "+" : "-", "-" : "+" }
+
+    return (link[2], rev_strand[link[3]], link[0], rev_strand[link[1]])
 
 def invert_orient(orient):
     d = {">" : "<", "<" : ">"}
@@ -264,30 +394,12 @@ def get_allele(bkpts, path, nodes):
                 chr2, pos2, orient2 = bkpt[1].split(":")
 
                 # Check if bkpt link in aln path
-                ## Left node
-                if orient1 == ">":
-                    left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
-                else:
-                    left = all([nodes[i].startswith(chr1), get_node_start(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
-
-                ## Right node
-                if orient2 == ">":
-                    right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
-                else:
-                    right = all([nodes[i+1].startswith(chr2), get_node_end(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
+                left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
+                right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
 
                 # Check in bkpt link in aln path (reverse)
-                ## Left node
-                if orient1 == ">":
-                    left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
-                else:
-                    left_rev = all([nodes[i+1].startswith(chr1), get_node_start(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
-                
-                ## Right node
-                if orient2 == ">":
-                    right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
-                else:
-                    right_rev = all([nodes[i].startswith(chr2), get_node_end(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
+                left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
+                right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
 
                 if (left and right) or (left_rev and right_rev):
                     return allele
@@ -318,117 +430,167 @@ def format_dict_sv_id(graph_sv_id, sv_type):
     # print(graph_sv_id)
 
     return graph_sv_id.replace(sv_type + "-", "")
-
-def get_breakpoints(sv_id, svtype):
-    '''Returns all breakpoints coordinates (as a list of one duple per bkpt) for a SV (sorted by allele)'''
-    #Considering 2 positions possible for left coord (SV start) because of particularities of real SV evaluation set
-
-    bkpts = [[], []] # [[allele 0], [allele 1]]
-    forward = ">"
-    reverse = "<"
     
-    if svtype != "BND":
+    # if sv_type in ["DEL", "INS", "INV"]:
 
-        chrom, info = sv_id.split(":")
-        __, pos, end = info.split("-")
+    #     chrom, info = graph_sv_id.split(":")
+    #     sv_type, pos, end = info.split("-")
 
-        if svtype == "DEL":
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward]))]
-            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))]
+    #     return ":".join([chrom, "-".join([pos, end])])
+
+    # elif sv_type == "BND":
+    #     return ""
+
+# def get_breakpoints(sv_id, svtype):
+#     '''Returns all breakpoints coordinates (as a list of one duple per bkpt) for a SV (sorted by allele)'''
+#     #Considering 2 positions possible for left coord (SV start) because of particularities of real SV evaluation set
+
+#     bkpts = [[], []] # [[allele 0], [allele 1]]
+#     forward = ">"
+#     reverse = "<"
+    
+#     if svtype != "BND":
+
+#         chrom, info = sv_id.split(":")
+#         __, pos, end = info.split("-")
+
+#         if svtype == "DEL":
+#             # end = str(int(pos) + int(end) + 1)
+#             bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(end)+1), forward])),
+#                         (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward])),
+#                         (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward])),
+#                         (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #left coord, right coord
+#                         #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
+#                         #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end, forward]))
+#                         #removed: (":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))
+#             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
+#                         (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward])),
+#                         (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward])),
+#                         (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
+#                         (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
+#                         (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward]))]
+#                         #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos, forward]))
+#                         #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
+#                         #removed: (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward]))
+#                         #removed: (":".join([chrom, str(int(end)-2), forward]), ":".join([chrom, str(int(end)-1), forward])
         
-        elif svtype == "INS":
-            end = str(int(pos) + 1)
-            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))]
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end+"a", forward])), 
-                        (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward]))]
+#         elif svtype == "INS":
+#             end = str(int(pos) + 1)
+#             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, forward]))] #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, str(int(end)-1), forward]))
+#             bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end+"a", forward])), 
+#                         (":".join([chrom, end+"a", forward]), ":".join([chrom, end, forward]))]
+#                         #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, end+"a", forward]))
+#                         #removed: (":".join([chrom, str(int(pos)-1), forward]), ":".join([chrom, pos+"a", forward]))
+#                         #removed: (":".join([chrom, end+"a", forward]), ":".join([chrom, str(int(end)-1), forward]))
         
-        elif svtype == "INV":
-            bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
-                        (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))]
-            bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, end, reverse])), 
-                        (":".join([chrom, str(int(pos)+1), reverse]), ":".join([chrom, str(int(end)+1), forward]))]
+#         elif svtype == "INV":
+#             bkpts[0] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), forward])), 
+#                         (":".join([chrom, str(int(end)-1), forward]), ":".join([chrom, end, forward])),
+#                         (":".join([chrom, end, forward]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
+#             bkpts[1] = [(":".join([chrom, pos, forward]), ":".join([chrom, str(int(pos)+1), reverse])), 
+#                         (":".join([chrom, str(int(end)-1), reverse]), ":".join([chrom, end, forward])),
+#                         (":".join([chrom, end, reverse]), ":".join([chrom, str(int(end)+1), forward]))] #temporary
 
-    else:
-        chrom, bnd_id_p1, bnd_id_p2 = sv_id.split(":")
-        left_coords, right_coords = parse_BND_id(chrom, ":".join([bnd_id_p1, bnd_id_p2]))
+#     else:
+#         chrom, bnd_id_p1, bnd_id_p2 = sv_id.split(":")
+#         left_coords, right_coords = parse_BND_id(chrom, ":".join([bnd_id_p1, bnd_id_p2]))
 
-        # Reference breakpoints
-        if left_coords[2] == forward:
-            bkpts[0].append((":".join(left_coords), ":".join([left_coords[0], str(int(left_coords[1])+1), forward])))
-        else:
-            bkpts[0].append((":".join([left_coords[0], str(int(left_coords[1])-1), forward]), ":".join(left_coords)))
+#         # Reference breakpoints
+#         if left_coords[2] == forward:
+#             bkpts[0].append((":".join(left_coords), ":".join([left_coords[0], str(int(left_coords[1])+1), forward])))
+#         else:
+#             bkpts[0].append((":".join([left_coords[0], str(int(left_coords[1])-1), forward]), ":".join(left_coords)))
         
-        if right_coords[2] == forward:
-            bkpts[0].append((":".join([right_coords[0], str(int(right_coords[1])-1), forward]), ":".join(right_coords)))
-        else:
-            bkpts[0].append((":".join(right_coords), ":".join([right_coords[0], str(int(right_coords[1])+1), forward])))
+#         if right_coords[2] == forward:
+#             bkpts[0].append((":".join([right_coords[0], str(int(right_coords[1])-1), forward]), ":".join(right_coords)))
+#         else:
+#             bkpts[0].append((":".join(right_coords), ":".join([right_coords[0], str(int(right_coords[1])+1), forward])))
         
-        # Alternative breakpoint
-        bkpts[1].append((":".join(left_coords), ":".join(right_coords)))
+#         # Alternative breakpoint
+#         bkpts[1].append((":".join(left_coords), ":".join(right_coords)))
 
-    return bkpts
+#     return bkpts
 
-def overlap_breakpoints(bkpts, sv_id, allele, aln_nodes, d_over, aln):
+# def overlap_breakpoints(bkpts, sv_id, allele, aln_nodes, d_over, aln):
 
-    over_bkpt = []
+#     over_bkpt = []
 
-    for bkpt in bkpts[allele]:
-        if check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
-            over_bkpt.append(bkpt)
+#     for bkpt in bkpts[allele]:
+#         if check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
+#             over_bkpt.append(bkpt)
 
-    return over_bkpt
+#     return over_bkpt
 
-def check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
-    bkpt_leftChrom, bkpt_leftCoord, bkpt_leftStrand = bkpt[0].split(":")
-    bkpt_rightChrom, bkpt_rightCoord, bkpt_rightStrand = bkpt[1].split(":")
+# def check_single_breakpoint(sv_id, bkpt, aln_nodes, d_over, aln):
+#     bkpt_leftChrom, bkpt_leftCoord, bkpt_leftStrand = bkpt[0].split(":")
+#     bkpt_rightChrom, bkpt_rightCoord, bkpt_rightStrand = bkpt[1].split(":")
+#     unaligned_start = aln["Ts"]
+#     unaligned_end = aln["Tlen"] - aln["Te"] - 1
+
+#     #Check presence of breakpoint nodes
+#     found_leftNode = False
+#     found_rightNode = False
+#     for node in aln_nodes:
+
+#         # Look for left node of bkpt
+#         if bkpt_leftStrand == ">":
+#             if get_node_end(node) == bkpt_leftCoord and get_node_chrom(node) == bkpt_leftChrom:
+#                 found_leftNode = True
+#                 bkpt_leftNode = node
+#         else:
+#             if get_node_start(node) == bkpt_leftCoord and get_node_chrom(node) == bkpt_leftChrom:
+#                 found_leftNode = True
+#                 bkpt_leftNode = node
+        
+#         # Look for right node of bkpt
+#         if bkpt_rightStrand == ">":
+#             if get_node_start(node) == bkpt_rightCoord and get_node_chrom(node) == bkpt_rightChrom:
+#                 found_rightNode = True
+#                 bkpt_rightNode = node
+#         else:
+#             if get_node_end(node) == bkpt_rightCoord and get_node_chrom(node) == bkpt_rightChrom:
+#                 found_rightNode = True
+#                 bkpt_rightNode = node
+
+#     if not (found_leftNode and found_rightNode):
+#         return False
+
+#     #Check breakpoint overlap
+#     left_overlap = False
+#     right_overlap = False
+
+#     #Forward alignment
+#     if aln_nodes.index(bkpt_leftNode) < aln_nodes.index(bkpt_rightNode):
+#         left_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_start >= d_over
+#         # if sum(get_node_len(node) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_left >= d_over:
+#         #     left_overlap = True
+#         right_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
+#         # if sum(get_node_len(node) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_right >= d_over:
+#         #     right_overlap = True
+    
+#     #Reverse alignment
+#     else:
+#         left_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[aln_nodes.index(bkpt_leftNode):]) - unaligned_end >= d_over
+#         right_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[:aln_nodes.index(bkpt_rightNode)+1]) - unaligned_start >= d_over
+
+#     return left_overlap and right_overlap   
+
+def check_bkpt_overlap(link, aln_nodes, d_over, aln, alt_node_len):
+
     unaligned_start = aln["Ts"]
     unaligned_end = aln["Tlen"] - aln["Te"] - 1
 
-    #Check presence of breakpoint nodes
-    found_leftNode = False
-    found_rightNode = False
-    for node in aln_nodes:
+    bkpt_leftNode = link[0]
+    bkpt_rightNode = link[2]
 
-        # Look for left node of bkpt
-        if bkpt_leftStrand == ">":
-            if get_node_end(node) == bkpt_leftCoord and get_node_chrom(node) == bkpt_leftChrom:
-                found_leftNode = True
-                bkpt_leftNode = node
-        else:
-            if get_node_start(node) == bkpt_leftCoord and get_node_chrom(node) == bkpt_leftChrom:
-                found_leftNode = True
-                bkpt_leftNode = node
-        
-        # Look for right node of bkpt
-        if bkpt_rightStrand == ">":
-            if get_node_start(node) == bkpt_rightCoord and get_node_chrom(node) == bkpt_rightChrom:
-                found_rightNode = True
-                bkpt_rightNode = node
-        else:
-            if get_node_end(node) == bkpt_rightCoord and get_node_chrom(node) == bkpt_rightChrom:
-                found_rightNode = True
-                bkpt_rightNode = node
-
-    if not (found_leftNode and found_rightNode):
-        return False
-
-    #Check breakpoint overlap
     left_overlap = False
     right_overlap = False
 
-    #Forward alignment
-    if aln_nodes.index(bkpt_leftNode) < aln_nodes.index(bkpt_rightNode):
-        left_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_start >= d_over
-        right_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
+    left_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[:aln_nodes.index(bkpt_leftNode)+1]) - unaligned_start >= d_over
 
-    
-    #Reverse alignment
-    else:
-        left_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[aln_nodes.index(bkpt_leftNode):]) - unaligned_end >= d_over
-        right_overlap = sum(get_node_len(node, sv_id) for node in aln_nodes[:aln_nodes.index(bkpt_rightNode)+1]) - unaligned_start >= d_over
+    right_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
 
-    return left_overlap and right_overlap   
+    return left_overlap and right_overlap
 
 def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
     # a_coords = [[target_nodes[0], int(p_start)], [target_nodes[-1], int(p_len)-int(p_end)-1]]
@@ -484,6 +646,8 @@ def get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs):
 
             else:
                 __, sv_start, sv_end = sv_id.split("-")
+                # if sv_type in ["DEL", "INS"]:
+                #     sv_end = int(sv_start) + int(sv_end)
 
             if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
                 target_svs.append(":".join([target_chrom, sv_id])) #add chrom to id for later save in aln dict
@@ -593,9 +757,9 @@ def get_node_end(node_id):
     else:
         end = node_id.split(":")[1].split("-")[1]
     return end
-def get_node_len(node_id, sv_id):
+def get_node_len(node_id, alt_node_len):
     if node_id.endswith("a"):
-        return int(sv_id.split("-")[-1])
+        return alt_node_len[node_id]
     else:
         return int(get_node_end(node_id)) - int(get_node_start(node_id)) + 1
 
