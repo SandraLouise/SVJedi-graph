@@ -100,21 +100,28 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, e, l_ad
     """ Output in VCF format and take genotype decision """
     getcontext().prec = 28
     outDecision = open(outputDecision, "w")
-
+    
+    genotype_format = "GT:DP:AD:PL"
     genotyped_svs = 0
     ungenotyped_svs = [0, []]
 
     with open(inputVCF) as inputFile:
         for line in inputFile:
+            if line.startswith("##FORMAT"):
+            	continue
+            
             if line.startswith("##"):
                 outDecision.write(line)
 
             elif line.startswith("#C"):
                 outDecision.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
-                outDecision.write('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Cumulated depth accross samples (sum)">\n')
-                outDecision.write('##FORMAT=<ID=AD,Number=2,Type=Integer,Description="Depth of each allele by sample">\n')
-                outDecision.write(line.rstrip("\n") + "\t" + "\t".join(["FORMAT", "SAMPLE"]) + "\n")
-
+                outDecision.write('##FORMAT=<ID=DP,Number=1,Type=Float,Description="Total number of informative read alignments across all alleles (after normalization for unbalanced SVs)">\n')
+                outDecision.write('##FORMAT=<ID=AD,Number=2,Type=Float,Description="Number of informative read alignments supporting each allele (after normalization by breakpoint number for unbalanced SVs)">\n')
+                
+                outDecision.write('##FORMAT=<ID=PL,Number=3,Type=Integer,Description="Phred-scaled likelihood for each genotype">\n')
+                #outDecision.write(line.rstrip("\n") + "\t" + "\t".join(["FORMAT", "SAMPLE"]) + "\n")
+                outDecision.write("#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE\n")
+                
             else:
                 in_chrom, in_start, _, __, in_type, ___, ____, in_info, *_ = line.rstrip("\n").split("\t")
 
@@ -293,28 +300,19 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, e, l_ad
                 #Output genotype in VCF
                 
                 numbers = ",".join(str(y) for y in nbAln)
-                if len(line.split("\t")) <= 8:
-                    new_line = (
-                        line.rstrip("\n")
-                        + "\t"
-                        + "GT:DP:AD:PL"
-                        + "\t"
-                        + genotype
-                        + ":"
-                        + str(round(sum(nbAln), 3))
-                        + ":"
-                        + str(numbers)
-                        + ":"
-                        + str(','.join(proba))
-                    )
-                    outDecision.write(new_line + "\n")
-
+                
+                if len(line.split("\t")) <= 8:    
+                	# input VCF does not contain any genotype information, just adding our genotype at the end of the input line
+                    line_before_genotype = line.rstrip("\n")
                 else:
-                    line_without_genotype = line.split("\t")[0:8]
-                    new_line = (
-                        "\t".join(line_without_genotype)
+                	# input VCF does contain at least one genotype information, we replace the old genotype information by ours
+                    fields_without_genotype = line.split("\t")[0:8]
+                    line_before_genotype = "\t".join(fields_without_genotype)
+                    
+                new_line = (
+                        line_before_genotype
                         + "\t"
-                        + "GT:DP:AD:PL"
+                        + genotype_format
                         + "\t"
                         + genotype
                         + ":"
@@ -324,7 +322,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, e, l_ad
                         + ":"
                         + str(','.join(proba))
                     )
-                    outDecision.write(new_line + "\n")
+                outDecision.write(new_line + "\n")
 
     outDecision.close()
 
