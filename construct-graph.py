@@ -96,6 +96,7 @@ def construct_gfa(inVCF, inFA, outGFA):
 
         l_discarded = []
         dict_ins_seq = {}
+        d_ins_multiplicity = {}
 
         d_sv_alt = {}
         #d = {sv_id : [ref_seq, alt_seq]}
@@ -114,13 +115,18 @@ def construct_gfa(inVCF, inFA, outGFA):
 
                 if sv_type == "DEL":
                     end_on_chr = int(get_info(info, "END"))
-                    sv_id = format_DEL_INS_id(sv_type, pos, end_on_chr)
+                    sv_id = format_DEL_id(pos, end_on_chr)
                 
                 elif sv_type == "INS":
-                    #end_on_chr = int(get_info(info, "END"))
                     end_on_chr = start_on_chr
                     
-                    sv_id = format_DEL_INS_id(sv_type, pos, end_on_chr)
+                    # Handle multiple INS at same position
+                    if pos not in d_ins_multiplicity.keys():
+                        d_ins_multiplicity[pos] = 0
+                    d_ins_multiplicity[pos] += 1
+                    ins_count = d_ins_multiplicity[pos]
+                    
+                    sv_id = format_INS_id(pos, ins_count)
 
                     #Wrong format: REF field len > 1
                     if len(ref) > 1 :
@@ -352,12 +358,17 @@ def construct_gfa(inVCF, inFA, outGFA):
         for sv_id in svs:
             sv_type = sv_id.split("-")[0]
 
-            if sv_type != "BND":
-                pos, end = sv_id.split("-")[1:]
-            else:
-                alt = sv_id.split("-")[1]
+            if sv_type == "INS":
+                pos, ins_count = sv_id.split("-")[1:]
+                pos = int(pos)
 
-            pos = int(pos)
+            elif sv_type == "BND":
+                alt = sv_id.split("-")[1]
+                
+            else:
+                pos, end = sv_id.split("-")[1:]
+                pos, end = int(pos), int(end)
+
 
             if sv_type == "DEL":
                 # end = pos + int(len_end) # /!\ end pos of nodes is defined from END tag in info field of vcf !!
@@ -388,7 +399,7 @@ def construct_gfa(inVCF, inFA, outGFA):
                 #--------------------------------------------------------------------------
 
                 else:
-                    end = int(end)
+
                     for node in all_nodes[chrom]:
                         coords = node.split(":")[1]
                         # if coords.endswith(str(pos)) or coords.endswith(str(pos-1)):
@@ -433,7 +444,7 @@ def construct_gfa(inVCF, inFA, outGFA):
 
                 else:
                     # Coordinates of ins sequence end with "a" (for alternative)
-                    ins_node = format_altnode_id(chrom, pos+1)
+                    ins_node = format_altnode_id(chrom, pos+1, ins_count)
                     graph_file.write(format_gfa_node(ins_node, dict_ins_seq[sv_id]))
 
                     for node in all_nodes[chrom]:
@@ -466,7 +477,6 @@ def construct_gfa(inVCF, inFA, outGFA):
                         d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
 
             elif sv_type == "INV":
-                end = int(end)
 
                 left_node, left_invnode, right_invnode, right_node = [None]*4
                 for node in all_nodes[chrom]:
@@ -578,8 +588,8 @@ def format_gfa_path(name, nodes, lengths):
 def format_node_id(chrom, coord1, coord2):
     # Add +1 to start and end positions to use 1-indexed positions (compatible with 1-indexed positions of VCF file format)
     return ":".join([ str(chrom), "-".join([ str(coord1+1), str(coord2+1) ]) ])
-def format_altnode_id(chrom, coord1):
-    return ":".join([ str(chrom), str(coord1)+"a" ])
+def format_altnode_id(chrom, coord1, count):
+    return ":".join([ str(chrom), str(coord1)+f".{str(count)}" ])
 
 def find_node_by_start(Tchr, pos, node_list):
     for node in node_list:
@@ -601,8 +611,12 @@ def find_node_by_end(Tchr, pos, node_list):
     print(Tchr, pos, node_list)
     sys.exit("Node not found, incorrect end position: " + str(pos))
 
-def format_DEL_INS_id(sv_type, pos, end):
-    return '-'.join([sv_type, str(pos), str(end)])
+def format_DEL_id(pos, end):
+    return '-'.join(["DEL", str(pos), str(end)])
+
+def format_INS_id(pos, ins_count):
+    return '-'.join(["INS", str(pos), str(ins_count)])
+
 def format_INV_id(pos, end):
     return '-'.join(["INV", str(pos), str(end)])
 
