@@ -21,8 +21,10 @@
 
 import sys
 import argparse
+import json
 
-def main(args):
+def parse_arguments(arguments):
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -40,14 +42,6 @@ def main(args):
         type=str,
         nargs=1, 
         required=True)
-
-    # parser.add_argument(
-    #     "-l", 
-    #     "--ladj", 
-    #     metavar="<lengthOfFlankingRegions", 
-    #     type=int,
-    #     nargs=1, 
-    #     default=[5000])
     
     parser.add_argument(
         "-o", 
@@ -55,43 +49,30 @@ def main(args):
         metavar="<outputFile", 
         type=str)
     
-    # parser.add_argument(
-    #     "-o", 
-    #     "--outputDir", 
-    #     metavar="<outputDirectory>", 
-    #     type=str,
-    #     required=False)
+    args = parser.parse_args(arguments)
 
-    args = parser.parse_args()
+    inVCF = args.vcf[0]
+    inFA = args.ref[0]
 
-    inputVCF = args.vcf[0]
-    reference_fasta = args.ref[0]
-    # l_adj = int(args.ladj[0])
-
-
-    # if args.outputDir:
-    #     newRef_file_name = args.outputDir + '/reference_subsequences.fa'
-    #     newVCF_file_name = args.outputDir + '/converted_variants.vcf'
-
-    # else:
-        ########### Tests
-        # if args.number:
-        #     n = int(args.number[0])
-    
-    d_breakpoints = {} 
-    d_svs = {}
-        
     if args.output:
-        graph_file_name = args.output
+        outGFA = args.output
         
     else:
-        graph_file_name = inputVCF.split("/")[-1].replace(".vcf", "_graph.gfa")
-        
+        outGFA = inVCF.split("/")[-1].replace(".vcf", "_graph.gfa")
 
+    return inVCF, inFA, outGFA
+
+def construct_gfa(inVCF, inFA, outGFA):
+
+    d_chr_bkpt = {} # (key) chromosome -> (value) list of breakpoint positions (int)
+    d_bkpt_sv = {} # (key) chromosome -> (value) { (key) breakpoint position -> (value) list of sv_id }
+    d_link_sv = {} # (key) link (node1, orient1, node2, orient2) -> (value) list of sv_id
+    d_svs = {}
+        
     #1. Get reference genome sequence
 
     d_chrom = {}
-    with open(reference_fasta) as sequenceFile:
+    with open(inFA) as sequenceFile:
         sequence = ""
         for line in sequenceFile:
             if line.startswith(">"):
@@ -106,15 +87,16 @@ def main(args):
         d_chrom[header] = sequence
 
     for chrom in d_chrom.keys():
-        d_breakpoints[chrom] = set()
+        d_chr_bkpt[chrom] = set()
         d_svs[chrom] = []
 
     #2. Process data
 
-    with open(inputVCF) as file:
+    with open(inVCF) as file:
 
         l_discarded = []
         dict_ins_seq = {}
+        d_ins_multiplicity = {}
 
         d_sv_alt = {}
         #d = {sv_id : [ref_seq, alt_seq]}
@@ -124,10 +106,6 @@ def main(args):
                 continue
 
             else:
-                #Test
-                # if args.number:
-                #     if count == n:
-                #         break
 
                 #Get SV info
                 chrom, pos, sv_id, ref, alt, __, __, info, *__ = line.rstrip().split("\t")
@@ -135,23 +113,28 @@ def main(args):
                 start_on_chr = int(pos) 
                 vcf_id = sv_id
 
-                # if not alt.startswith("<"):
-                #     #ref and alt sequences provided in VCF line
-                #     if ref[0] != alt[0]:
-                #         start_on_chr -= 1
-                #         dict_sv_alt[sv_id] = alt.upper()
-
                 if sv_type == "DEL":
                     end_on_chr = int(get_info(info, "END"))
-                    sv_id = format_DEL_INS_id(sv_type, pos, end_on_chr)
+                    sv_id = format_DEL_id(pos, end_on_chr)
                 
                 elif sv_type == "INS":
-                    #end_on_chr = int(get_info(info, "END"))
                     end_on_chr = start_on_chr
                     
-                    sv_id = format_DEL_INS_id(sv_type, pos, end_on_chr)
+                    # Handle multiple INS at same position
+                    if pos not in d_ins_multiplicity.keys():
+                        d_ins_multiplicity[pos] = 0
+                    d_ins_multiplicity[pos] += 1
+                    ins_count = d_ins_multiplicity[pos]
+                    
+                    sv_id = format_INS_id(pos, ins_count)
+
+                    #Wrong format: REF field len > 1
+                    if len(ref) > 1 :
+                        l_discarded.append(line.rstrip())
+                        continue
+
                     #INS seq not in ALT field, get seq from INFO field
-                    if alt.startswith("<"):
+                    elif alt.startswith("<"):
                         if any(["LEFT_SVINSSEQ=" in info, "RIGHT_SVINSSEQ=" in info]):
                             # left_insseq = get_info(info, "LEFT_SVINSSEQ")
                             # right_insseq = get_info(info, "RIGHT_SVINSSEQ")
@@ -189,75 +172,73 @@ def main(args):
                         l_discarded.append(line.rstrip())
                         continue
 
-                    d_breakpoints[chrom].add(start_on_chr)
-                    d_breakpoints[chrom].add(end_on_chr)
+                    # Add chrom to d_bkpt_sv keys
+                    if chrom not in d_bkpt_sv.keys():
+                        d_bkpt_sv[chrom] = {}
+
+                    for bkpt_pos in set([start_on_chr, end_on_chr]):
+
+                        # Add breakpoint position to chromosome breakpoint list
+                        d_chr_bkpt[chrom].add(bkpt_pos)
+
+                        # Add breakpoint position to d_bkpt_sv[chrom] keys
+                        if bkpt_pos not in d_bkpt_sv[chrom].keys():
+                            d_bkpt_sv[chrom][bkpt_pos] = []
+
+                        # Associate breakpoint position to SV
+                        d_bkpt_sv[chrom][bkpt_pos].append(sv_id)
 
                     d_svs[chrom].append(sv_id)
 
                 elif sv_type == 'BND':
                     left_coords, right_coords = parse_BND_id(chrom, sv_id)
 
+                    # Unsupported BND format
                     if left_coords is None:
                         l_discarded.append(line.rstrip())
                         # continue
 
-                    #Discard inter-chrom BNDs
-                    elif left_coords[0] != right_coords[0]:
-                        l_discarded.append(line.rstrip())
-                        # continue
-
                     else:
-                        if left_coords[2] == "-":
-                            d_breakpoints[left_coords[0]].add(int(left_coords[1])-1)
-                        else:
-                            d_breakpoints[left_coords[0]].add(int(left_coords[1]))
-                        if right_coords[2] == "+":
-                            d_breakpoints[right_coords[0]].add(int(right_coords[1])-1)
-                        else:
-                            d_breakpoints[right_coords[0]].add(int(right_coords[1]))
+
+                        # Case 1: left and right are forward strands (t[p[)
+                        if left_coords[2] == "+" and right_coords[2] == "+":
+
+                            # The bkpt POS on right chrom is p - 1
+                            right_coords[1] = right_coords[1] - 1
                         
+                        # Case 2: right is reverse strand (t]p])
+                            # p is the bkpt POS on right chrom
+                            # no need to modify right_coords[1]
+                        
+                        # Case 3: left is reverse strand ([p[t)
+                        elif left_coords[2] == "-":
+
+                            # The bkpt POS on left chrom is p - 1
+                            left_coords[1] = left_coords[1] - 1
+                            # The bkpt POS on right chrom is t - 1
+                            right_coords[1] = right_coords[1] - 1
+
+                        # Get the 2 breakpoints
+                        left_bkpt = (left_coords[0], left_coords[1])
+                        right_bkpt = (right_coords[0], right_coords[1])
+
+                        # Add breakpoints to dictionnaries
+                        for (bkpt_chrom, bkpt_pos) in [left_bkpt, right_bkpt]:
+                            
+                            # Add breakpoint position to chromosome breakpoint list
+                            if bkpt_chrom not in d_bkpt_sv.keys():
+                                d_bkpt_sv[bkpt_chrom] = {}
+
+                            d_chr_bkpt[bkpt_chrom].add(bkpt_pos)
+
+                            # Add breakpoint position to d_bkpt_sv[chrom] keys
+                            if bkpt_pos not in d_bkpt_sv[bkpt_chrom].keys():
+                                d_bkpt_sv[bkpt_chrom][bkpt_pos] = []
+                            
+                            # Associate breakpoint position to SV
+                            d_bkpt_sv[bkpt_chrom][bkpt_pos].append(sv_id)
+
                         d_svs[chrom].append(sv_id)
-
-                
-                # if prev_chrom is None:
-                    
-                #     #Initialize breakpoints for new chrom
-                #     region_breakpoints = [start_on_chr]
-                #     if sv_type != 'BND':
-                #         region_breakpoints.append(end_on_chr)
-
-                #     #else: if 2nd bkpt BND sur meme chrom: ajout aux bkpt de la region
-
-                #     region_id = '_'.join(['ref', chrom, sv_id])
-
-                # elif prev_chrom != chrom:
-
-                #     #Save breakpoints of prev chrom
-                #     d_breakpoints[region_id] = region_breakpoints
-
-                #     #Initialize breakpoints for new chrom
-                #     region_breakpoints = [start_on_chr]
-                #     if sv_type != 'BND':
-                #         region_breakpoints.append(end_on_chr)
-
-                #     #else: if 2nd bkpt BND sur meme chrom: ajout aux bkpt de la region
-
-                #     region_id = '_'.join(['ref', chrom, sv_id])
-
-                # else:
-                #     region_breakpoints.append(start_on_chr)
-                #     if sv_type != 'BND':
-                #         region_breakpoints.append(end_on_chr)
-                #     region_id = '_'.join([region_id, sv_id]) #ex: 'ref_1_DEL-88749-1400' + '_' + sv2_type + '-' + pos_sv_2 + '-' + len_sv_2
-
-                # prev_chrom = chrom
-        
-        # # Last chrom
-        # d_breakpoints[region_id] = region_breakpoints
-
-        # Check if BND listed end in existing region (is there a region on endChr for which startRegion < endPos < endRegion ?)
-        # if yes (expected case, translocations should be described with 2 BND lines): breakpoint should be in dict_breakpoints[region_id]
-        # if not: add a region
     
     # List ignored SVs
     discarded = open('ignored_svs.vcf', 'w')
@@ -268,14 +249,14 @@ def main(args):
 
 
     #3. Create graph
-    graph_file = open(graph_file_name, "w")
+    graph_file = open(outGFA, "w")
     all_nodes = {}
 
     for chrom, sv_list in d_svs.items():
         if len(sv_list) > 0:
             graph_file.write("#{}\t{}\n".format(chrom, ";".join(sv_list)))
 
-    for chrom, breakpoints in d_breakpoints.items():
+    for chrom, breakpoints in d_chr_bkpt.items():
         all_nodes[chrom] = []
 
         #Convert breakpoint set to breakpoint list + sort list
@@ -318,16 +299,39 @@ def main(args):
             else:
                 node_start = breakpoints[i]
                 node_end = breakpoints[i+1]-1
-            
+
+            # Create reference node
             node_id = format_node_id(chrom, node_start, node_end)
             all_nodes[chrom].append(node_id)
             node_seq = get_ref_seq(d_chrom, chrom, node_start, node_end)
+
+            # Check for inaccuracies between node len and node positions
             if node_end - node_start + 1 != len(node_seq):
                 print("Error in node:", chrom, str(node_start), str(node_end), str(len(node_seq)))
                 bkpt_error = True
 
+            # Add node to graph (gfa)
             graph_file.write(format_gfa_node(node_id, node_seq))
             nodes_len.append(str(len(node_seq)))
+
+            # Add link to d_link_sv
+            if i != -1:
+
+                # Create reference link (between previous node and current node) and add to graph (gfa)
+                graph_file.write(format_gfa_link_pp(prev_node_id, node_id, 0))
+
+                # Associate link to sv_id (reference allele)
+                link_id = (prev_node_id, "+", node_id, "+")
+
+                link_key = get_link_key(link_id)
+
+                d_link_sv[link_key] = []
+
+                for sv_id in d_bkpt_sv[chrom][breakpoints[i]]:
+                    d_link_sv[link_key].append((":".join([chrom, sv_id]), 0))
+            
+            # Save node_id as prev_node_id
+            prev_node_id = node_id
 
         path_nodes = "+,".join(all_nodes[chrom]) + "+"
         path_len = "M,".join(nodes_len) + "M"
@@ -340,24 +344,31 @@ def main(args):
         # print(region, all_nodes[chrom])
         # print(path_nodes)
 
-        for i in range(len(all_nodes[chrom])-1):
-            # print(all_nodes[chrom][i], all_nodes[chrom][i+1])
-            graph_file.write(format_gfa_link_pp(all_nodes[chrom][i], all_nodes[chrom][i+1], 0))
+        # # Create link between all current chromosome nodes
+        # for i in range(len(all_nodes[chrom])-1):
+        #     # print(all_nodes[chrom][i], all_nodes[chrom][i+1])
+        #     graph_file.write(format_gfa_link_pp(all_nodes[chrom][i], all_nodes[chrom][i+1], 0))
         
         # all_nodes.extend(all_nodes[chrom])
+    
 
     #Write alt NODES and alt LINKS
-    for chrom in d_svs.keys():
-        svs = d_svs[chrom]
+    for chrom, svs in d_svs.items():
+
         for sv_id in svs:
             sv_type = sv_id.split("-")[0]
 
-            if sv_type != "BND":
-                pos, end = sv_id.split("-")[1:]
-            else:
-                alt = sv_id.split("-")[1]
+            if sv_type == "INS":
+                pos, ins_count = sv_id.split("-")[1:]
+                pos = int(pos)
 
-            pos = int(pos)
+            elif sv_type == "BND":
+                alt = sv_id.split("-")[1]
+                
+            else:
+                pos, end = sv_id.split("-")[1:]
+                pos, end = int(pos), int(end)
+
 
             if sv_type == "DEL":
                 # end = pos + int(len_end) # /!\ end pos of nodes is defined from END tag in info field of vcf !!
@@ -368,10 +379,14 @@ def main(args):
                 #         end = int(coords.split("-")[1])
                 #         # => PB if another breakpoint at pos+1 !!
 
+                #--------------------------------------------------------------------------
+                # Part to remove
                 if sv_id in d_sv_alt.keys():
+
                     #alternative node
                     alt_node = format_node_id(chrom, pos-1, "a")
                     graph_file.write(format_gfa_node(alt_node, d_sv_alt[sv_id]))
+
                     #alternative links
                     for node in all_nodes[chrom]:
                         coords = node.split(":")[1]
@@ -381,9 +396,10 @@ def main(args):
                             right_node = node
                     graph_file.write(format_gfa_link_pp(left_node, alt_node, 1))
                     graph_file.write(format_gfa_link_pp(alt_node, right_node, 1))
+                #--------------------------------------------------------------------------
 
                 else:
-                    end = int(end)
+
                     for node in all_nodes[chrom]:
                         coords = node.split(":")[1]
                         # if coords.endswith(str(pos)) or coords.endswith(str(pos-1)):
@@ -391,12 +407,26 @@ def main(args):
                             left_node = node
                         elif coords.startswith(str(end+1)):
                             right_node = node
+                    
+                    # Create alternative link and add to graph (gfa)
                     graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
+
+                    # Associate alternative link to sv_id (DEL)
+                    link_id = (left_node, "+", right_node, "+")
+
+                    link_key = get_link_key(link_id)
+
+                    if link_key not in d_link_sv.keys():
+                        d_link_sv[link_key] = []
+                    
+                    d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
             
             elif sv_type == "INS":
 
                 left_node, right_node = None, None
 
+                #--------------------------------------------------------------------------
+                # Part to remove
                 if sv_id in d_sv_alt.keys():
                     # corr_pos = pos - 1
                     ins_node = format_altnode_id(chrom, pos+1)
@@ -410,10 +440,11 @@ def main(args):
                             right_node = node
                     graph_file.write(format_gfa_link_pp(left_node, ins_node, 1))
                     graph_file.write(format_gfa_link_pp(ins_node, right_node, 1))
+                #--------------------------------------------------------------------------
 
                 else:
                     # Coordinates of ins sequence end with "a" (for alternative)
-                    ins_node = format_altnode_id(chrom, pos+1)
+                    ins_node = format_altnode_id(chrom, pos+1, ins_count)
                     graph_file.write(format_gfa_node(ins_node, dict_ins_seq[sv_id]))
 
                     for node in all_nodes[chrom]:
@@ -427,11 +458,25 @@ def main(args):
 
                     # if any([left_node is None, right_node is None]):
                         # print(sv, all_nodes[chrom])
+
+                    # Create alternative links and add to graph (gfa)
                     graph_file.write(format_gfa_link_pp(left_node, ins_node, 1))
                     graph_file.write(format_gfa_link_pp(ins_node, right_node, 1))
 
+                    # Associate alternative links to sv_id (INS)
+                    link_id_1 = (left_node, "+", ins_node, "+")
+                    link_id_2 = (ins_node, "+", right_node, "+")
+
+                    for link_id in [link_id_1, link_id_2]:
+
+                        link_key = get_link_key(link_id)
+
+                        if link_key not in d_link_sv.keys():
+                            d_link_sv[link_key] = []
+                        
+                        d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
+
             elif sv_type == "INV":
-                end = int(end)
 
                 left_node, left_invnode, right_invnode, right_node = [None]*4
                 for node in all_nodes[chrom]:
@@ -453,10 +498,26 @@ def main(args):
 
                 else:
                     # print(sv, "\tleft:", left_node, "\tinv:", left_invnode, right_invnode, "\tright:", right_node)
+
+                    # Create alternative links and add to graph (gfa)
                     graph_file.write(format_gfa_link_pm(left_node, right_invnode))
                     graph_file.write(format_gfa_link_mp(left_invnode, right_node))
-            
+
+                    # Associate alternative links to sv_id (INV)
+                    link_id_1 = (left_node, "+", right_invnode, "-")
+                    link_id_2 = (left_invnode, "-", right_node, "+")
+
+                    for link_id in [link_id_1, link_id_2]:
+
+                        link_key = get_link_key(link_id)
+
+                        if link_key not in d_link_sv.keys():
+                            d_link_sv[link_key] = []
+                        
+                        d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
+
             elif sv_type == "BND":
+                
                 left_coords, right_coords = parse_BND_id(chrom, sv_id)
 
                 if left_coords[2] == "-":
@@ -469,24 +530,53 @@ def main(args):
                 else:
                     right_node = find_node_by_end(right_coords[0], int(right_coords[1]), all_nodes[right_coords[0]])
                 
+                # Create alternative link and associate with sv_id
                 if left_coords[2] == "-":
                     graph_file.write(format_gfa_link_mp(left_node, right_node))
+                    link_id = (left_node, "-", right_node, "+")
+
                 elif right_coords[2] == "-":
                     graph_file.write(format_gfa_link_pm(left_node, right_node))
+                    link_id = (left_node, "+", right_node, "-")
+
                 else:
                     graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
+                    link_id = (left_node, "+", right_node, "+")
+                
+                #Associate with sv_id
+                link_key = get_link_key(link_id)
+
+                if link_key not in d_link_sv.keys():
+                    d_link_sv[link_key] = []
+
+                d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
 
     graph_file.close()
 
+    # Check association of links to sv_ids
+    # for link, sv_list in d_link_sv.items():
+    #     print("\n#", link)
+    #     for sv in sv_list:
+    #         print("- ", sv)
+
+    # Output d_link_sv as json file
+    with open("svs_edges.json", 'w') as file:
+        file.write(json.dumps(d_link_sv, sort_keys=True, indent=4))
+
+def get_link_key(link_id):
+    return "@".join(link_id)
 
 def format_gfa_link_pp(node1, node2, rank):
     # print("\t".join(["L", node1, "+", node2, "+", "0M", "SR:i:"+str(rank)]) + "\n")
     return "\t".join(["L", node1, "+", node2, "+", "0M"]) + "\n"
 def format_gfa_link_pm(node1, node2):
+    rank = 1
     return "\t".join(["L", node1, "+", node2, "-", "0M"]) + "\n"
 def format_gfa_link_mp(node1, node2):
+    rank = 1
     return "\t".join(["L", node1, "-", node2, "+", "0M"]) + "\n"
 def format_gfa_link_mm(node1, node2):
+    rank = 1
     return "\t".join(["L", node1, "-", node2, "-", "0M"]) + "\n"
 
 def format_gfa_node(node_id, seq):
@@ -498,8 +588,8 @@ def format_gfa_path(name, nodes, lengths):
 def format_node_id(chrom, coord1, coord2):
     # Add +1 to start and end positions to use 1-indexed positions (compatible with 1-indexed positions of VCF file format)
     return ":".join([ str(chrom), "-".join([ str(coord1+1), str(coord2+1) ]) ])
-def format_altnode_id(chrom, coord1):
-    return ":".join([ str(chrom), str(coord1)+"a" ])
+def format_altnode_id(chrom, coord1, count):
+    return ":".join([ str(chrom), str(coord1)+f".{str(count)}" ])
 
 def find_node_by_start(Tchr, pos, node_list):
     for node in node_list:
@@ -517,35 +607,64 @@ def find_node_by_end(Tchr, pos, node_list):
         if chrom == Tchr and end_pos == pos:
             return node
     #Test
+
+    print(Tchr, pos, node_list)
     sys.exit("Node not found, incorrect end position: " + str(pos))
 
-def format_DEL_INS_id(sv_type, pos, end):
-    return '-'.join([sv_type, str(pos), str(end)])
+def format_DEL_id(pos, end):
+    return '-'.join(["DEL", str(pos), str(end)])
+
+def format_INS_id(pos, ins_count):
+    return '-'.join(["INS", str(pos), str(ins_count)])
+
 def format_INV_id(pos, end):
     return '-'.join(["INV", str(pos), str(end)])
-def format_BND_id(pos, alt):
 
+def format_BND_id(pos, alt):
+    '''
+    There are 4 types of BND possible (https://samtools.github.io/hts-specs/VCFv4.2.pdf):
+    
+    - t[p[: [+++t] -> [p+++]
+    - t]p]: [+++t] -> [---p] (reverse comp piece extending left of p is joined after t)
+    - ]p]t: [+++p] -> [t+++]
+    - [p[t: [p---] -> [t+++] (reverse comp piece extending right of p is joined before t)
+
+    where t is the nucleotide indicated in the REF field (at POS in CHROM),
+    and p is the ending position of bkpt (chrom2:pos2)
+    '''
+
+    # BND type: t[p[ or [p[t
     if "[" in alt:
         parsed_alt = list(filter(bool, alt.split("[")))
-        if ":" in parsed_alt[1]:
-            s = parsed_alt[0]
-        else:
-            s = parsed_alt[1]
 
+        # t[p[: piece extending to the right of p is joined after t
+        if ":" in parsed_alt[1]:
+            t = parsed_alt[0]
+
+        # [p[t: reverse comp piece extending right of p is joined before t
+        else:
+            t = parsed_alt[1]
+
+    # BND type: t]p] or ]p]t
     elif "]" in alt:
         parsed_alt = list(filter(bool, alt.split("]")))
+
+        # t]p]: reverse comp piece extending left of p is joined after t
         if ":" in parsed_alt[1]:
-            s = parsed_alt[0]
+            t = parsed_alt[0]
+        
+        # ]p]t: piece extending to the left of p is joined before t
         else:
-            s = parsed_alt[1]
+            t = parsed_alt[1]
 
     else:
         return "BND-format"
 
-    if len(s) > 1:
-        return "BND-format"
+    # if len(t) > 1:
+    #     return "BND-format"
 
-    alt = alt.replace(s, pos)
+    alt = alt.replace(t, pos)
+
     return '-'.join(["BND", alt])
 
 def parse_BND_id(chrom, bnd_id):
@@ -554,49 +673,73 @@ def parse_BND_id(chrom, bnd_id):
     alt = bnd_id.split("BND-")[1]
 
     if "[" in alt:
+        
         alt = list(filter(bool, alt.split("[")))
+
+        # t[p[: piece extending to the right of p is joined after t
         if ":" in alt[1]:
-            # t[p[ : piece extending to the right of p is joined after t
-            right_chrom = alt[1].split(":")[0]
-            right_pos = alt[1].split(":")[1]
-            right_strand = "+"
+
+            t = alt[0]
+            p = alt[1]
+
             left_chrom = chrom
-            left_pos = alt[0]
+            left_pos = t
             left_strand = "+"
 
+            right_chrom = p.split(":")[0]
+            right_pos = p.split(":")[1]
+            right_strand = "+"
+
+        # [p[t: reverse comp piece extending right of p is joined before t
         elif ":" in alt[0]:
-            # [p[t : reverse comp piece extending right of p is joined before t
-            left_chrom = alt[0].split(":")[0]
-            left_pos = alt[0].split(":")[1]
+            
+            t = alt[1]
+            p = alt[0]
+
+            left_chrom = p.split(":")[0]
+            left_pos = p.split(":")[1]
             left_strand = "-"
+
             right_chrom = chrom
-            right_pos = alt[1]
+            right_pos = t
             right_strand = "+"
 
     elif "]" in alt:
+
         alt = list(filter(bool, alt.split("]")))
+
+        # t]p]: reverse comp piece extending left of p is joined after t
         if ":" in alt[1]:
-            # t]p] : reverse comp piece extending left of p is joined after t
-            right_chrom = alt[1].split(":")[0]
-            right_pos = alt[1].split(":")[1]
-            right_strand = "-"
+
+            t = alt[0]
+            p = alt[1]
+            
             left_chrom = chrom
-            left_pos = alt[0]
+            left_pos = t
             left_strand = "+"
 
+            right_chrom = p.split(":")[0]
+            right_pos = p.split(":")[1]
+            right_strand = "-"
+
+        # ]p]t: piece extending to the left of p is joined before t
         elif ":" in alt[0]:
-            # ]p]t piece extending to the left of p is joined before t
-            left_chrom = alt[0].split(":")[0]
-            left_pos = alt[0].split(":")[1]
+
+            t = alt[1]
+            p = alt[0]
+            
+            left_chrom = p.split(":")[0]
+            left_pos = p.split(":")[1]
             left_strand = "+"
+
             right_chrom = chrom
-            right_pos = alt[1]
+            right_pos = t
             right_strand = "+"
 
     if right_chrom is None:
         return None, None
     else:
-        return (left_chrom, left_pos, left_strand), (right_chrom, right_pos, right_strand)
+        return [left_chrom, int(left_pos), left_strand], [right_chrom, int(right_pos), right_strand]
 
 
 def get_info(info, label):
@@ -633,4 +776,5 @@ if __name__ == "__main__":
         sys.exit("Error: missing arguments")
 
     else:
-        main(sys.argv[1:])
+        inVCF, inFA, outGFA = parse_arguments(sys.argv[1:])
+        construct_gfa(inVCF, inFA, outGFA)
