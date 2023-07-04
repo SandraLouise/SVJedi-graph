@@ -53,6 +53,13 @@ The genotyped VCF file obtained (`tiny_DEL_genotype.vcf`) should be identical as
 
 ### Parameters
 
+|:---:|:---:|:---|
+|`-v`|`--vcf`|VCF file containing the set of SVs to genotype.|
+|`-r`| `--ref` | FASTA file containing the reference genome (on which the SVs have been identified).|
+|`-q`| `--reads` | FASTQ file containing the long reads used to genotype.|
+|`-p`| `--prefix` | Prefix of output files.|
+|`-t`| `--threads` | Number of threads to use for the mapping step.|
+|`-ms`| `--minsupport` | Minimum number of alignments to genotype a SV (default: 3>=).|
 
 * `-v` `--vcf`  VCF file containing the set of SVs to genotype.
 * `-r` `--ref`  FASTA file containing the reference genome (on which the SVs have been identified).
