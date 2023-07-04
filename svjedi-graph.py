@@ -31,36 +31,44 @@ def main(svjg_dir, args):
         "--vcf", 
         # metavar="<inputVCF>", 
         type=str,
-        help="vcf format",
+        help="SV set in vcf format",
         required=True)
     parser.add_argument(
         "-r", 
         "--ref", 
         # metavar="<referenceGenome>", 
         type=str, 
-        help="fasta format",
+        help="Reference genome in fasta format",
         required=True)
     parser.add_argument(
         "-q", 
         "--reads", 
         # metavar="<queryReads>", 
         type=str, 
-        help="fastq format",
+        help="Long reads in fastq format",
         required=True)
     parser.add_argument(
         "-p", 
         "--prefix", 
         # metavar="<outFilesPrefix>", 
         type=str, 
-        help="prefix of generated files",
+        help="Prefix of generated files",
         required=True)
     parser.add_argument(
         "-t", 
         "--threads", 
         # metavar="<threadNumber>", 
         type=int, 
-        help="number of threads to use for read mapping",
+        help="Number of threads to use for read mapping",
         default=[1])
+    parser.add_argument(
+        "-ms",
+        "--minsupport",
+        metavar="<minNbAln>",
+        type=int,
+        default=3,
+        help="Minimum number of alignments to genotype a SV (default: 3>=)",
+    )
 
     args = parser.parse_args()
     inVCF = args.vcf
@@ -68,8 +76,7 @@ def main(svjg_dir, args):
     inFQ = args.reads
     outPrefix = args.prefix
     threads = args.threads
-
-    ladj = 5000
+    min_support = args.minsupport
 
     #### Create variant graph
     print("Constructing variation graph...")
@@ -97,7 +104,7 @@ def main(svjg_dir, args):
     print("Genotyping SVs...")
 
     outVCF = outPrefix + "_genotype.vcf"
-    c4 = "python3 {}/predict-genotype.py -d {} -v {} -o {}".format(svjg_dir, outJSON, inVCF, outVCF)
+    c4 = "python3 {}/predict-genotype.py -d {} -v {} --minsupport {} -o {}".format(svjg_dir, outJSON, inVCF, str(min_support), outVCF)
     subprocess.run(c4, shell=True)
 
 if __name__ == "__main__":
