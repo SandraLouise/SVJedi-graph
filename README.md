@@ -6,7 +6,7 @@ SVJedi-graph is a structural variation (SV) genotyper for long read data. It tak
 
 SVjedi-graph is based on a representation of the genome and the different SV alleles in a variation graph. After building this variation graph from the reference genome sequence and the input variant file, long reads are mapped on this graph using minigraph[^1]. Then it estimates the genotype of each variant in a given individual sample based on allele-specific alignment counts. 
 
-Currently, SVJedi-graph can genotype five types of SVs: deletions, insertions, duplications, inversions and intra-chromosomal translocations. (support for inter-chromosomal translocations is in progress)
+Currently, SVJedi-graph can genotype five types of SVs: deletions, insertions, duplications, inversions and translocations (intra- and inter-chromosomal).
 
 
 [^1]: Li, H., Feng, X. & Chu, C. The design and construction of reference pangenome graphs with minigraph. Genome Biol 21, 265 (2020). https://doi.org/10.1186/s13059-020-02168-z
@@ -100,6 +100,9 @@ Here are the information needed for SVJedi-graph to genotype the following SV ty
 	- ```INFO``` field must contain ```SVTYPE=BND```
 	- ```ALT``` field must be formated as: ```t[pos[```, ```t]pos]```, ```]pos]t``` or ```[pos[t```, with `pos` indicating the second breakpoint position and brackets directions indicating which parts of the two chromosomes should be joined together 
 
+## Citation
+
+Sandra Romain, Claire Lemaitre, SVJedi-graph: improving the genotyping of close and overlapping structural variants with long reads using a variation graph, Bioinformatics, Volume 39, Issue Supplement_1, June 2023, Pages i270–i278, https://doi.org/10.1093/bioinformatics/btad237
 
 ## Contact
 
