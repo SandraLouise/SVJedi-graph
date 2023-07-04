@@ -68,8 +68,10 @@ def construct_gfa(inVCF, inFA, outGFA):
     d_bkpt_sv = {} # (key) chromosome -> (value) { (key) breakpoint position -> (value) list of sv_id }
     d_link_sv = {} # (key) link (node1, orient1, node2, orient2) -> (value) list of sv_id
     d_svs = {}
-        
-    #1. Get reference genome sequence
+    
+    #================================================================================
+    # 1. Get reference genome sequence
+    #================================================================================
 
     d_chrom = {}
     with open(inFA) as sequenceFile:
@@ -90,7 +92,9 @@ def construct_gfa(inVCF, inFA, outGFA):
         d_chr_bkpt[chrom] = set()
         d_svs[chrom] = []
 
-    #2. Process data
+    #================================================================================
+    # 2. Process data
+    #================================================================================
 
     with open(inVCF) as file:
 
@@ -107,7 +111,9 @@ def construct_gfa(inVCF, inFA, outGFA):
 
             else:
 
+                #--------------------------------------------------------------------
                 #Get SV info
+                #--------------------------------------------------------------------
                 chrom, pos, sv_id, ref, alt, __, __, info, *__ = line.rstrip().split("\t")
                 sv_type = get_info(info, "SVTYPE")
                 start_on_chr = int(pos) 
@@ -164,8 +170,9 @@ def construct_gfa(inVCF, inFA, outGFA):
                     continue
                     print(sv_type)
     
-
+                #--------------------------------------------------------------------
                 #Add breakpoints to list
+                #--------------------------------------------------------------------
                 if sv_type in ['DEL', 'INS', 'INV']:
 
                     if end_on_chr >= len(d_chrom[chrom]) - 1 or start_on_chr >= len(d_chrom[chrom]) - 1:
@@ -247,8 +254,10 @@ def construct_gfa(inVCF, inFA, outGFA):
         discarded.write("\n" + dis_sv)
     discarded.close()
 
+    #================================================================================
+    # 3. Create graph
+    #================================================================================
 
-    #3. Create graph
     graph_file = open(outGFA, "w")
     all_nodes = {}
 
@@ -259,7 +268,9 @@ def construct_gfa(inVCF, inFA, outGFA):
     for chrom, breakpoints in d_chr_bkpt.items():
         all_nodes[chrom] = []
 
-        #Convert breakpoint set to breakpoint list + sort list
+        #----------------------------------------------------------------------------
+        # Convert breakpoint set to breakpoint list + sort list
+        #----------------------------------------------------------------------------
         breakpoints = list(breakpoints)
         breakpoints.sort()
 
@@ -272,7 +283,9 @@ def construct_gfa(inVCF, inFA, outGFA):
 
         bkpt_error = False
 
+        #----------------------------------------------------------------------------
         # Write NODES, ref PATH and ref LINKS (excluding INS nodes and alternative links)
+        #----------------------------------------------------------------------------
         nodes_len = []
         for i in range(-1, len(breakpoints)):
 
@@ -282,14 +295,12 @@ def construct_gfa(inVCF, inFA, outGFA):
                 if len(breakpoints) == 0:
                     breakpoints.append(len(d_chrom[chrom]))
 
-                #node_start = breakpoints[0]-l_adj
                 node_start = 0
                 node_end = breakpoints[0]-1
 
             # Last node of region/graph component
             elif i == len(breakpoints)-1:
                 node_start = breakpoints[i]
-                #node_end = breakpoints[i]+l_adj-1
                 node_end = len(d_chrom[chrom]) - 1
 
             # INS node added later
@@ -340,19 +351,10 @@ def construct_gfa(inVCF, inFA, outGFA):
         if bkpt_error:
             print(chrom)
             print(breakpoints)
-
-        # print(region, all_nodes[chrom])
-        # print(path_nodes)
-
-        # # Create link between all current chromosome nodes
-        # for i in range(len(all_nodes[chrom])-1):
-        #     # print(all_nodes[chrom][i], all_nodes[chrom][i+1])
-        #     graph_file.write(format_gfa_link_pp(all_nodes[chrom][i], all_nodes[chrom][i+1], 0))
-        
-        # all_nodes.extend(all_nodes[chrom])
     
-
-    #Write alt NODES and alt LINKS
+    #----------------------------------------------------------------------------
+    # Write alt NODES and alt LINKS
+    #----------------------------------------------------------------------------
     for chrom, svs in d_svs.items():
 
         for sv_id in svs:
@@ -371,13 +373,6 @@ def construct_gfa(inVCF, inFA, outGFA):
 
 
             if sv_type == "DEL":
-                # end = pos + int(len_end) # /!\ end pos of nodes is defined from END tag in info field of vcf !!
-                
-                # for node in all_nodes[chrom]:
-                #     coords = node.split(":")[1]
-                #     if any([coords.startswith(str(pos)), coords.startswith(str(pos+1))]):
-                #         end = int(coords.split("-")[1])
-                #         # => PB if another breakpoint at pos+1 !!
 
                 #--------------------------------------------------------------------------
                 # Part to remove
@@ -553,11 +548,6 @@ def construct_gfa(inVCF, inFA, outGFA):
 
     graph_file.close()
 
-    # Check association of links to sv_ids
-    # for link, sv_list in d_link_sv.items():
-    #     print("\n#", link)
-    #     for sv in sv_list:
-    #         print("- ", sv)
 
     # Output d_link_sv as json file
     with open("svs_edges.json", 'w') as file:

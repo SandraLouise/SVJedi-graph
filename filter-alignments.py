@@ -49,24 +49,12 @@ def main(args):
         required=False
     )
 
-    # parser.add_argument(
-    #     "-L", 
-    #     "--ladj", metavar="<len_adjacent_seq>", nargs=1, 
-    #     required=False, 
-    #     default=5000
-    # )
     parser.add_argument(
         "-O", 
         "--dover", metavar="<min_breakpoint_overlap>", nargs=1, 
         required=False, 
         default=100
     )
-    # parser.add_argument(
-    #     "-E", 
-    #     "--dend", metavar="<max_dist_semiglobal>", nargs=1, 
-    #     required=False, 
-    #     default=100
-    # )
 
     parser.add_argument(
         "-o", 
@@ -96,9 +84,7 @@ def main(args):
 
     gfa_file = args.gfa[0]
     gaf_file = args.gaf[0]
-    # l_adj = args.ladj
     d_over = args.dover
-    # d_end = args.dend
 
     #=========================================================
     # 1. Load graph info
@@ -160,12 +146,6 @@ def main(args):
                     if key in d_link_sv.keys():
                         key_to_check.append(key)
 
-                # If the read is reverse
-                # if link_key not in d_link_sv:
-
-                #     rev_link = reverse_link(link)
-                #     link_key = get_link_key(rev_link)
-
                 for key in key_to_check:
 
                     # Check each overlapped SV
@@ -184,9 +164,6 @@ def main(args):
 
                             dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
 
-                            #debug
-                            # if link_key[0] in ["5", "6"]:
-                            #     print(line.split("\t")[0], sv_id, allele, link)
 
     #Stats
     aln_nb = 0
@@ -250,37 +227,6 @@ def invert_orient(orient):
     d = {">" : "<", "<" : ">"}
     return d[orient]
 
-# def get_allele(bkpts, path, nodes):
-
-#     for node in nodes:
-#         if node.endswith("a"):
-#             return 1
-
-#     for allele in [0,1]:
-#         for bkpt in bkpts[allele]:
-#             # print(bkpt)
-        
-#             for i in range(len(nodes)-1):
-           
-#                 # bkpt = [chrom:pos_left, chrom:pos_right]
-#                 chr1, pos1, orient1 = bkpt[0].split(":")
-#                 chr2, pos2, orient2 = bkpt[1].split(":")
-
-#                 # Check if bkpt link in aln path
-#                 left = all([nodes[i].startswith(chr1), get_node_end(nodes[i]) == pos1, path.split(nodes[i])[0][-1] == orient1])
-#                 right = all([nodes[i+1].startswith(chr2), get_node_start(nodes[i+1]) == pos2, path.split(nodes[i+1])[0][-1] == orient2])
-
-#                 # Check in bkpt link in aln path (reverse)
-#                 left_rev = all([nodes[i+1].startswith(chr1), get_node_end(nodes[i+1]) == pos1, path.split(nodes[i+1])[0][-1] == invert_orient(orient1)])
-#                 right_rev = all([nodes[i].startswith(chr2), get_node_start(nodes[i]) == pos2, path.split(nodes[i])[0][-1] == invert_orient(orient2)])
-
-#                 if (left and right) or (left_rev and right_rev):
-#                     return allele
-
-    
-#     return None
-
-
 def format_DEL_INS_id(sv_type, pos, end):
     return '-'.join([sv_type, str(pos), str(end)])
 def format_INV_id(pos, end):
@@ -324,106 +270,6 @@ def check_bkpt_overlap(link, aln_nodes, d_over, aln, alt_node_len):
     right_overlap = sum(get_node_len(node, alt_node_len) for node in aln_nodes[aln_nodes.index(bkpt_rightNode):]) - unaligned_end >= d_over
 
     return left_overlap and right_overlap
-
-# def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
-#     # a_coords = [[target_nodes[0], int(p_start)], [target_nodes[-1], int(p_len)-int(p_end)-1]]
-#     # a_coords_for_semiglob = [[a_start_node, unaligned_left], [a_end_node, unaligned_right]]
-#     # list_component_first_last_node = [component first node, component last node]
-
-#     glob_region_left_f = all([start_end_region[0] == target_nodes[0], aln["Ts"] <= d_end])
-#     glob_region_left_r = all([start_end_region[0] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
-#     glob_region_left = any([glob_region_left_f, glob_region_left_r])
-
-#     glob_region_right_f = all([start_end_region[1] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
-#     glob_region_right_r = all([start_end_region[1] == target_nodes[0], aln["Ts"] <= d_end <= d_end])
-#     glob_region_right = any([glob_region_right_f, glob_region_right_r])
-
-#     return any([(glob_region_left) and (glob_region_right), #allele inside read
-#                 (aln["Qs"] <= d_end) and (aln["Qlen"] - d_end <= aln["Qe"]), #read inside allele
-#                 (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
-#                 (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
-
-# def get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs):
-
-#     target_svs = []
-
-#     def get_left_right_ends(node_list):
-#         left_node_start = get_node_start(node_list[0])
-#         if left_node_start.endswith("a"):
-#             left_node_start = int(left_node_start[:-1])
-#         else:
-#             left_node_start = int(left_node_start)
-
-#         right_node_end = get_node_end(node_list[-1])
-#         if right_node_end.endswith("a"):
-#             right_node_end = int(right_node_end[:-1])
-#         else:
-#             right_node_end = int(right_node_end)
-        
-#         return left_node_start, right_node_end
-
-
-#     if not multi_chrom:
-
-#         if target_chrom not in region_svs.keys():
-#             return target_svs
-
-#         left_node_start, right_node_end = get_left_right_ends(target_nodes)
-
-#         for sv_id in region_svs[target_chrom]:
-
-#             if sv_id.startswith("BND-"):
-#                 left_coords, right_coords = parse_BND_id(target_chrom, sv_id)
-#                 sv_start = left_coords[1]
-#                 sv_end = right_coords[1]
-
-#             else:
-#                 __, sv_start, sv_end = sv_id.split("-")
-#                 # if sv_type in ["DEL", "INS"]:
-#                 #     sv_end = int(sv_start) + int(sv_end)
-
-#             if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
-#                 target_svs.append(":".join([target_chrom, sv_id])) #add chrom to id for later save in aln dict
-
-#     else:
-
-#         for chrom in target_chrom:
-#             if chrom not in region_svs.keys():
-#                 return target_svs
-
-#         for chrom in target_chrom:
-
-#             chrom_nodes = [node for node in target_nodes if node.startswith(chrom)]
-#             left_node_start, right_node_end = get_left_right_ends(chrom_nodes)
-
-#             for sv_id in region_svs[chrom]:
-#                 if sv_id.startswith("BND-"):
-#                     left_coords, right_coords = parse_BND_id(target_chrom, sv_id)
-
-#                     if left_coords[0] == chrom:
-#                         sv_pos = left_coords[1]
-#                         chrom_bis, sv_pos_bis = right_coords[:2]
-#                         chrom_bis_nodes = [node for node in target_nodes if node.startswith(chrom_bis)]
-#                         left_node_start_bis, right_node_end_bis = get_left_right_ends(chrom_bis_nodes)
-                    
-#                     else:
-#                         sv_pos = right_coords[1]
-#                         chrom_bis, sv_pos_bis = left_coords[:2]
-#                         chrom_bis_nodes = [node for node in target_nodes if node.startswith(chrom_bis)]
-#                         left_node_start_bis, right_node_end_bis = get_left_right_ends(chrom_bis_nodes)
-                    
-#                     if any([min(left_node_start, right_node_end) <= int(sv_pos) <= max(left_node_start, right_node_end), min(left_node_start_bis, right_node_end_bis) <= int(sv_pos_bis) <= max(left_node_start_bis, right_node_end_bis)]):
-#                         target_svs.append(":".join([chrom, sv_id]))
-                
-#                 else:
-#                     __, sv_start, sv_end = sv_id.split("-")
-
-#                     if any([min(left_node_start, right_node_end) <= int(sv_start) <= max(left_node_start, right_node_end), min(left_node_start, right_node_end) <= int(sv_end) <= max(left_node_start, right_node_end)]):
-#                         target_svs.append(":".join([chrom, sv_id]))
-
-#         #TODO: handle multi-chrom BNDs
-
-#     return target_svs
 
 def parse_BND_id(chrom, bnd_id):
 
