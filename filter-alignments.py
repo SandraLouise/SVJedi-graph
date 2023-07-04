@@ -152,28 +152,41 @@ def main(args):
             for link in target_links:
 
                 link_key = get_link_key(link)
+                rev_link_key = get_link_key(reverse_link(link))
+
+                # Check for presence of both link and rev_link in d_link_sv
+                key_to_check = []
+                for key in [link_key, rev_link_key]:
+                    if key in d_link_sv.keys():
+                        key_to_check.append(key)
 
                 # If the read is reverse
-                if link_key not in d_link_sv:
+                # if link_key not in d_link_sv:
 
-                    rev_link = reverse_link(link)
-                    link_key = get_link_key(rev_link)
+                #     rev_link = reverse_link(link)
+                #     link_key = get_link_key(rev_link)
 
-                # Check each overlapped SV
-                for (sv_id, allele) in d_link_sv[link_key]:
-                    
-                    # BREAKPOINT FILTER
-                    if check_bkpt_overlap(link, target_nodes, d_over, aln, alt_node_len):
+                for key in key_to_check:
+
+                    # Check each overlapped SV
+                    for (sv_id, allele) in d_link_sv[key]:
                         
-                        # Add aln to dict
-                        # here sv_id = {chrom}:{sv_type}-{pos description for this sv type}
-                        sv_type = sv_id.split(":")[1].split("-")[0]
-                        dict_sv_id = format_dict_sv_id(sv_id, sv_type)
+                        # BREAKPOINT FILTER
+                        if check_bkpt_overlap(link, target_nodes, d_over, aln, alt_node_len):
+                            
+                            # Add aln to dict
+                            # here sv_id = {chrom}:{sv_type}-{pos description for this sv type}
+                            sv_type = sv_id.split(":")[1].split("-")[0]
+                            dict_sv_id = format_dict_sv_id(sv_id, sv_type)
 
-                        if dict_sv_id not in dict_of_informative_aln.keys():
-                            dict_of_informative_aln[dict_sv_id] = [[], []]
+                            if dict_sv_id not in dict_of_informative_aln.keys():
+                                dict_of_informative_aln[dict_sv_id] = [[], []]
 
-                        dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
+                            dict_of_informative_aln[dict_sv_id][allele].append(line.split("cg:Z:")[0])
+
+                            #debug
+                            # if link_key[0] in ["5", "6"]:
+                            #     print(line.split("\t")[0], sv_id, allele, link)
 
     #Stats
     aln_nb = 0
@@ -312,23 +325,23 @@ def check_bkpt_overlap(link, aln_nodes, d_over, aln, alt_node_len):
 
     return left_overlap and right_overlap
 
-def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
-    # a_coords = [[target_nodes[0], int(p_start)], [target_nodes[-1], int(p_len)-int(p_end)-1]]
-    # a_coords_for_semiglob = [[a_start_node, unaligned_left], [a_end_node, unaligned_right]]
-    # list_component_first_last_node = [component first node, component last node]
+# def is_semiglobal_aln(aln, target_nodes, start_end_region, d_end):
+#     # a_coords = [[target_nodes[0], int(p_start)], [target_nodes[-1], int(p_len)-int(p_end)-1]]
+#     # a_coords_for_semiglob = [[a_start_node, unaligned_left], [a_end_node, unaligned_right]]
+#     # list_component_first_last_node = [component first node, component last node]
 
-    glob_region_left_f = all([start_end_region[0] == target_nodes[0], aln["Ts"] <= d_end])
-    glob_region_left_r = all([start_end_region[0] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
-    glob_region_left = any([glob_region_left_f, glob_region_left_r])
+#     glob_region_left_f = all([start_end_region[0] == target_nodes[0], aln["Ts"] <= d_end])
+#     glob_region_left_r = all([start_end_region[0] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
+#     glob_region_left = any([glob_region_left_f, glob_region_left_r])
 
-    glob_region_right_f = all([start_end_region[1] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
-    glob_region_right_r = all([start_end_region[1] == target_nodes[0], aln["Ts"] <= d_end <= d_end])
-    glob_region_right = any([glob_region_right_f, glob_region_right_r])
+#     glob_region_right_f = all([start_end_region[1] == target_nodes[-1], aln["Tlen"] - aln["Te"] - 1 <= d_end])
+#     glob_region_right_r = all([start_end_region[1] == target_nodes[0], aln["Ts"] <= d_end <= d_end])
+#     glob_region_right = any([glob_region_right_f, glob_region_right_r])
 
-    return any([(glob_region_left) and (glob_region_right), #allele inside read
-                (aln["Qs"] <= d_end) and (aln["Qlen"] - d_end <= aln["Qe"]), #read inside allele
-                (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
-                (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
+#     return any([(glob_region_left) and (glob_region_right), #allele inside read
+#                 (aln["Qs"] <= d_end) and (aln["Qlen"] - d_end <= aln["Qe"]), #read inside allele
+#                 (aln["Qs"] <= d_end) and (glob_region_right), #read left aligned
+#                 (glob_region_left) and (aln["Qlen"] - d_end <= aln["Qe"])]) #read right aligned
 
 # def get_target_svs(target_nodes, target_chrom, multi_chrom, region_svs):
 
