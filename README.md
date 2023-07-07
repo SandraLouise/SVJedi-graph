@@ -33,7 +33,7 @@ git clone https://gitlab.inria.fr/sromain/svjedi-graph.git
 ## Usage
 
 ```bash
-./svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> ]
+./svjedi-graph.py -v <inputVCF> -r <refFA> -q <longreadsFQ> [ -p <output_prefix> -t <threads> -ms <minsupport> ]
 ``` 
 
 ### Input VCF requirements
@@ -43,12 +43,19 @@ For all variants, the `SVTYPE` tag must be present in the `INFO` field (`SVTYPE=
 
 ### Test with a small dataset
 
+To check that SVJedi-graph behaves as expected on your device, you can run:
 
 ```bash
-./svjedi-graph.py -v test_data/tiny_DEL.vcf -r test_data/tiny_GRCh37_chr22.fa -q tiny_sim_reads.fastq.gz -p tiny_DEL
+./test-dir/run_test.sh
 ``` 
 
-The genotyped VCF file obtained (`tiny_DEL_genotype.vcf`) should be identical as the one in the `test_data` folder.
+To explore the output files on a small dataset, run:
+
+```bash
+mkdir outputfiles
+cd outputfiles
+python3 ../svjedi-graph.py -v ../test-dir/test.vcf -r ../test-dir/reference_genome.fasta -q ../test-dir/simulated_reads.fastq.gz -p test
+```
 
 
 ### Parameters

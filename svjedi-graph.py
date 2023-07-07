@@ -89,7 +89,6 @@ def main(svjg_dir, args):
     print("Mapping reads on graph...")
 
     outGAF = outPrefix + ".gaf"
-    aln_log = outGAF + ".log"
     c2 = "minigraph -x lr -t{} {} {} > {}".format(threads, outGFA, inFQ, outGAF)
     subprocess.run(c2, shell=True)
 

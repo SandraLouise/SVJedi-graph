@@ -1,0 +1,11 @@
+---------------------
+Table of contingency:
+[[ 7  0  0  0]
+ [ 0 19  0  0]
+ [ 0  0 14  0]]
+
+Genotyping accuracy: 100.0
+Genotyping rate: 100.0
+Number of predicted SV: 40
+Number of unpredicted SV: 0
+Number of known SVs: 40
