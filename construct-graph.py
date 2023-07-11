@@ -169,6 +169,16 @@ def construct_gfa(inVCF, inFA, outGFA):
                 else: #SVTYPE = DUP par exemple
                     continue
                     print(sv_type)
+
+                ## DEBUG
+                # if sv_type == "BND":
+                #     for coord in parse_BND_id(chrom, sv_id):
+                #         if coord[1] == 1:
+                #             print(line)
+                # else:
+                #     if 1 in [start_on_chr, end_on_chr]:
+                #         print(line)
+                ##
     
                 #--------------------------------------------------------------------
                 #Add breakpoints to list
@@ -184,16 +194,19 @@ def construct_gfa(inVCF, inFA, outGFA):
                         d_bkpt_sv[chrom] = {}
 
                     for bkpt_pos in set([start_on_chr, end_on_chr]):
+                        
+                        # Do not add bkpt pos at extremities of chrom
+                        if 1 < bkpt_pos < len(d_chrom[chrom]):
 
-                        # Add breakpoint position to chromosome breakpoint list
-                        d_chr_bkpt[chrom].add(bkpt_pos)
+                            # Add breakpoint position to chromosome breakpoint list
+                            d_chr_bkpt[chrom].add(bkpt_pos)
 
-                        # Add breakpoint position to d_bkpt_sv[chrom] keys
-                        if bkpt_pos not in d_bkpt_sv[chrom].keys():
-                            d_bkpt_sv[chrom][bkpt_pos] = []
+                            # Add breakpoint position to d_bkpt_sv[chrom] keys
+                            if bkpt_pos not in d_bkpt_sv[chrom].keys():
+                                d_bkpt_sv[chrom][bkpt_pos] = []
 
-                        # Associate breakpoint position to SV
-                        d_bkpt_sv[chrom][bkpt_pos].append(sv_id)
+                            # Associate breakpoint position to SV
+                            d_bkpt_sv[chrom][bkpt_pos].append(sv_id)
 
                     d_svs[chrom].append(sv_id)
 
@@ -207,7 +220,7 @@ def construct_gfa(inVCF, inFA, outGFA):
 
                     else:
 
-                        # Case 1: left and right are forward strands (t[p[)
+                        # Case 1: left and right are forward strands (t[p[ or ]p]t)
                         if left_coords[2] == "+" and right_coords[2] == "+":
 
                             # The bkpt POS on right chrom is p - 1
@@ -231,19 +244,22 @@ def construct_gfa(inVCF, inFA, outGFA):
 
                         # Add breakpoints to dictionnaries
                         for (bkpt_chrom, bkpt_pos) in [left_bkpt, right_bkpt]:
-                            
-                            # Add breakpoint position to chromosome breakpoint list
-                            if bkpt_chrom not in d_bkpt_sv.keys():
-                                d_bkpt_sv[bkpt_chrom] = {}
 
-                            d_chr_bkpt[bkpt_chrom].add(bkpt_pos)
-
-                            # Add breakpoint position to d_bkpt_sv[chrom] keys
-                            if bkpt_pos not in d_bkpt_sv[bkpt_chrom].keys():
-                                d_bkpt_sv[bkpt_chrom][bkpt_pos] = []
+                            # Do not add bkpt pos at extremities of chrom
+                            if 1 < bkpt_pos < len(d_chrom[bkpt_chrom]):
                             
-                            # Associate breakpoint position to SV
-                            d_bkpt_sv[bkpt_chrom][bkpt_pos].append(sv_id)
+                                # Add breakpoint position to chromosome breakpoint list
+                                if bkpt_chrom not in d_bkpt_sv.keys():
+                                    d_bkpt_sv[bkpt_chrom] = {}
+
+                                d_chr_bkpt[bkpt_chrom].add(bkpt_pos)
+
+                                # Add breakpoint position to d_bkpt_sv[chrom] keys
+                                if bkpt_pos not in d_bkpt_sv[bkpt_chrom].keys():
+                                    d_bkpt_sv[bkpt_chrom][bkpt_pos] = []
+                                
+                                # Associate breakpoint position to SV
+                                d_bkpt_sv[bkpt_chrom][bkpt_pos].append(sv_id)
 
                         d_svs[chrom].append(sv_id)
     
@@ -515,6 +531,11 @@ def construct_gfa(inVCF, inFA, outGFA):
                 
                 left_coords, right_coords = parse_BND_id(chrom, sv_id)
 
+                ## DEBUG
+                # if 0 in [int(left_coords[1]), int(right_coords[1])]:
+                #     print(sv_id, left_coords, right_coords)
+                ##
+
                 if left_coords[2] == "-":
                     left_node = find_node_by_start(left_coords[0], int(left_coords[1]), all_nodes[left_coords[0]])
                 else:
@@ -525,26 +546,31 @@ def construct_gfa(inVCF, inFA, outGFA):
                 else:
                     right_node = find_node_by_end(right_coords[0], int(right_coords[1]), all_nodes[right_coords[0]])
                 
-                # Create alternative link and associate with sv_id
-                if left_coords[2] == "-":
-                    graph_file.write(format_gfa_link_mp(left_node, right_node))
-                    link_id = (left_node, "-", right_node, "+")
+                if not None in [left_node, right_node]:
 
-                elif right_coords[2] == "-":
-                    graph_file.write(format_gfa_link_pm(left_node, right_node))
-                    link_id = (left_node, "+", right_node, "-")
+                    # Create alternative link and associate with sv_id
+                    if left_coords[2] == "-":
+                        graph_file.write(format_gfa_link_mp(left_node, right_node))
+                        link_id = (left_node, "-", right_node, "+")
 
-                else:
-                    graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
-                    link_id = (left_node, "+", right_node, "+")
+                    elif right_coords[2] == "-":
+                        graph_file.write(format_gfa_link_pm(left_node, right_node))
+                        link_id = (left_node, "+", right_node, "-")
+
+                    else:
+                        graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
+                        link_id = (left_node, "+", right_node, "+")
+                    
+                    #Associate with sv_id
+                    link_key = get_link_key(link_id)
+
+                    if link_key not in d_link_sv.keys():
+                        d_link_sv[link_key] = []
+
+                    d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
                 
-                #Associate with sv_id
-                link_key = get_link_key(link_id)
-
-                if link_key not in d_link_sv.keys():
-                    d_link_sv[link_key] = []
-
-                d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
+                else:
+                    print(f"Warning: no alternative link defined for {sv_id}")
 
     graph_file.close()
 
@@ -588,7 +614,9 @@ def find_node_by_start(Tchr, pos, node_list):
         if chrom == Tchr and start_pos == pos:
             return node
     #Test
-    sys.exit("Node not found, incorrect start position: " + str(pos))
+    # sys.exit("Node not found, incorrect start position: " + str(pos))
+    print(f"Warning: looked for nonexistant node starting at {str(pos)} on {Tchr}")
+    return None
 
 def find_node_by_end(Tchr, pos, node_list):
     for node in node_list:
@@ -597,9 +625,9 @@ def find_node_by_end(Tchr, pos, node_list):
         if chrom == Tchr and end_pos == pos:
             return node
     #Test
-
-    print(Tchr, pos, node_list)
-    sys.exit("Node not found, incorrect end position: " + str(pos))
+    # sys.exit("Node not found, incorrect end position: " + str(pos))
+    print(f"Warning: looked for nonexistant node ending at {str(pos)} on {Tchr}")
+    return None
 
 def format_DEL_id(pos, end):
     return '-'.join(["DEL", str(pos), str(end)])

@@ -105,7 +105,7 @@ def main(args):
         for line in graph_file:
 
             #Process alternative nodes (INS nodes)
-            if line.startswith("S") and "." in line.split("\t")[1]:
+            if line.startswith("S") and "." in line.split("\t")[1].split(":")[-1]:
 
                 node = line.split("\t")[1]
                 # Save node length
