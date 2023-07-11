@@ -54,7 +54,7 @@ To explore the output files on a small dataset, run:
 ```bash
 mkdir outputfiles
 cd outputfiles
-python3 ../svjedi-graph.py -v ../test-dir/test.vcf -r ../test-dir/reference_genome.fasta -q ../test-dir/simulated_reads.fastq.gz -p test
+./../svjedi-graph.py -v ../test-dir/test.vcf -r ../test-dir/reference_genome.fasta -q ../test-dir/simulated_reads.fastq.gz -p test
 ```
 
 
