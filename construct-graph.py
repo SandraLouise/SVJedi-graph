@@ -68,6 +68,7 @@ def construct_gfa(inVCF, inFA, outGFA):
     d_bkpt_sv = {} # (key) chromosome -> (value) { (key) breakpoint position -> (value) list of sv_id }
     d_link_sv = {} # (key) link (node1, orient1, node2, orient2) -> (value) list of sv_id
     d_svs = {}
+    d_sv_ID = {} # (key) sv_id -> (value) vcf_id
     
     #================================================================================
     # 1. Get reference genome sequence
@@ -170,6 +171,8 @@ def construct_gfa(inVCF, inFA, outGFA):
                     continue
                     print(sv_type)
 
+                d_sv_ID[sv_id] = vcf_id
+
                 ## DEBUG
                 # if sv_type == "BND":
                 #     for coord in parse_BND_id(chrom, sv_id):
@@ -219,11 +222,13 @@ def construct_gfa(inVCF, inFA, outGFA):
                         # continue
 
                     else:
-
+                        #--------------------------------------------------------------------
+                        # Correct bkpt pos
+                        #--------------------------------------------------------------------
                         # Case 1: left and right are forward strands (t[p[ or ]p]t)
                         if left_coords[2] == "+" and right_coords[2] == "+":
 
-                            # The bkpt POS on right chrom is p - 1
+                            # The bkpt POS on right chrom is p -1
                             right_coords[1] = right_coords[1] - 1
                         
                         # Case 2: right is reverse strand (t]p])
@@ -334,7 +339,7 @@ def construct_gfa(inVCF, inFA, outGFA):
 
             # Check for inaccuracies between node len and node positions
             if node_end - node_start + 1 != len(node_seq):
-                print("Error in node:", chrom, str(node_start), str(node_end), str(len(node_seq)))
+                print(f"Warning: seq. length of node {node_id} ({str(len(node_seq))}) doesn't match node coordinates ({str(node_start)} to {str(node_end)})")
                 bkpt_error = True
 
             # Add node to graph (gfa)
@@ -570,7 +575,7 @@ def construct_gfa(inVCF, inFA, outGFA):
                     d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
                 
                 else:
-                    print(f"Warning: no alternative link defined for {sv_id}")
+                    print(f"Warning: no alternative link defined for {sv_id} (ID: {d_sv_ID[sv_id]})")
 
     graph_file.close()
 
