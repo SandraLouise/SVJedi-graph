@@ -326,19 +326,24 @@ def get_node_chrom(node_id):
 
 def get_node_start(node_id):
     #node_id = chrom : start - end
-    if "." in node_id:
-        return node_id.split(":")[1].split(".")[0]
+    #if alternative node
+    if "." in node_id.split(":")[-1]:
+        return node_id.split(":")[-1].split(".")[0]
+    #if reference node
     else:
-        return node_id.split(":")[1].split("-")[0]
+        return node_id.split(":")[-1].split("-")[0]
 def get_node_end(node_id):
-    if "." in node_id:
-        return node_id.split(":")[1].split(".")[0]
+    #if alternative node
+    if "." in node_id.split(":")[-1]:
+        return node_id.split(":")[-1].split(".")[0]
+    #if reference node
     else:
-        end = node_id.split(":")[1].split("-")[1]
-    return end
+        return node_id.split(":")[-1].split("-")[1]
 def get_node_len(node_id, alt_node_len):
-    if "." in node_id:
+    #if alternative node
+    if "." in node_id.split(":")[-1]:
         return alt_node_len[node_id]
+    #if reference node
     else:
         return int(get_node_end(node_id)) - int(get_node_start(node_id)) + 1
 
