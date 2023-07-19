@@ -83,7 +83,10 @@ def main(svjg_dir, args):
 
     outGFA = outPrefix + ".gfa"
     c1 = "python3 {}/construct-graph.py -v {} -r {} -o {}".format(svjg_dir, inVCF, inREF, outGFA)
-    subprocess.run(c1, shell=True)
+    proc1 = subprocess.run(c1, shell=True)
+
+    if proc1.returncode == 1:
+        sys.exit("Failed to contruct the variation graph.\nExiting SVJedi-graph.")
 
     #### Map reads on graph
     print("Mapping reads on graph...")
