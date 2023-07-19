@@ -120,6 +120,10 @@ def construct_gfa(inVCF, inFA, outGFA):
                 start_on_chr = int(pos) 
                 vcf_id = sv_id
 
+                #Check that chrom IDs match between FASTA and VCF
+                if chrom not in d_chrom.keys():
+                    sys.exit(f"Error: sequence '{chrom}' from input VCF is missing in reference genome, chromosomes must have the same names in input VCF and reference genome files")
+
                 if sv_type == "DEL":
                     end_on_chr = int(get_info(info, "END"))
                     sv_id = format_DEL_id(pos, end_on_chr)
