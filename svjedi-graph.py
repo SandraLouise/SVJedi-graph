@@ -93,21 +93,30 @@ def main(svjg_dir, args):
 
     outGAF = outPrefix + ".gaf"
     c2 = "minigraph -x lr -t{} {} {} > {}".format(threads, outGFA, inFQ, outGAF)
-    subprocess.run(c2, shell=True)
+    proc2 = subprocess.run(c2, shell=True)
+
+    if proc2.returncode == 1:
+        sys.exit("Failed to map the reads on the graph.\nExiting SVJedi-graph.")
 
     #### Filter alns
     print("Filtering alignment file...")
 
     outJSON = outPrefix + "_informative_aln.json"
     c3 = "python3 {}/filter-alignments.py -a {} -g {} -p {}".format(svjg_dir, outGAF, outGFA, outPrefix)
-    subprocess.run(c3, shell=True)
+    proc3 = subprocess.run(c3, shell=True)
+
+    if proc3.returncode == 1:
+        sys.exit("Failed to filter the alignments.\nExiting SVJedi-graph.")
 
     #### Genotype
     print("Genotyping SVs...")
 
     outVCF = outPrefix + "_genotype.vcf"
     c4 = "python3 {}/predict-genotype.py -d {} -v {} --minsupport {} -o {}".format(svjg_dir, outJSON, inVCF, str(min_support), outVCF)
-    subprocess.run(c4, shell=True)
+    proc4 = subprocess.run(c4, shell=True)
+
+    if proc4.returncode == 1:
+        sys.exit("Failed to predict the genotypes.\nExiting SVJedi-graph.")
 
 if __name__ == "__main__":
     if sys.argv == 1:
