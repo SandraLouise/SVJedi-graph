@@ -73,8 +73,9 @@ def main(args):
     args = parser.parse_args()
         
     if args.prefix:
+
         output_aln_dict = args.prefix + '_informative_aln' + '.json'
-        gfa_info_dict = args.prefix + "_gfa_info.json"
+        svs_edges_dict = args.prefix + "_svs_edges.json"
     else:
         output_aln_dict = 'informative_aln.json'
         gfa_info_dict = "gfa_info.json"
@@ -91,7 +92,7 @@ def main(args):
     #=========================================================
     # 1.1. Edges - SVs associations
     #---------------------------------------------------------
-    with open("svs_edges.json", "r") as link_sv_json:
+    with open(svs_edges_dict, "r") as link_sv_json:
         d_link_sv = json.load(link_sv_json)
         # key = link_id = "left_node_id@strand@right_node_id@strand"
         # value = list((sv_id, allele))
