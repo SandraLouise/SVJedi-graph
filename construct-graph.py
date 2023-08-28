@@ -56,13 +56,15 @@ def parse_arguments(arguments):
 
     if args.output:
         outGFA = args.output
+        outPrefix = outGFA.replace(".gfa", "_")
         
     else:
-        outGFA = inVCF.split("/")[-1].replace(".vcf", "_graph.gfa")
+        outGFA = "variation_graph.gfa"
+        outPrefix = ""
 
-    return inVCF, inFA, outGFA
+    return inVCF, inFA, outGFA, outPrefix
 
-def construct_gfa(inVCF, inFA, outGFA):
+def construct_gfa(inVCF, inFA, outGFA, outPrefix):
 
     d_chr_bkpt = {} # (key) chromosome -> (value) list of breakpoint positions (int)
     d_bkpt_sv = {} # (key) chromosome -> (value) { (key) breakpoint position -> (value) list of sv_id }
@@ -75,7 +77,7 @@ def construct_gfa(inVCF, inFA, outGFA):
     #================================================================================
 
     d_chrom = {}
-    with open(inFA) as sequenceFile:
+    with open(inFA, "r") as sequenceFile:
         sequence = ""
         for line in sequenceFile:
             if line.startswith(">"):
@@ -97,7 +99,7 @@ def construct_gfa(inVCF, inFA, outGFA):
     # 2. Process data
     #================================================================================
 
-    with open(inVCF) as file:
+    with open(inVCF, "r") as file:
 
         l_discarded = []
         dict_ins_seq = {}
@@ -273,7 +275,7 @@ def construct_gfa(inVCF, inFA, outGFA):
                         d_svs[chrom].append(sv_id)
     
     # List ignored SVs
-    discarded = open('ignored_svs.vcf', 'w')
+    discarded = open(f'{outPrefix}ignored_svs.txt', 'w')
     discarded.write("##The following SVs were ignored during graph construction due to wrong format")
     for dis_sv in l_discarded:
         discarded.write("\n" + dis_sv)
@@ -585,7 +587,7 @@ def construct_gfa(inVCF, inFA, outGFA):
 
 
     # Output d_link_sv as json file
-    with open("svs_edges.json", 'w') as file:
+    with open(f"{outPrefix}svs_edges.json", 'w') as file:
         file.write(json.dumps(d_link_sv, sort_keys=True, indent=4))
 
 def get_link_key(link_id):
@@ -803,5 +805,5 @@ if __name__ == "__main__":
         sys.exit("Error: missing arguments")
 
     else:
-        inVCF, inFA, outGFA = parse_arguments(sys.argv[1:])
-        construct_gfa(inVCF, inFA, outGFA)
+        inVCF, inFA, outGFA, outPrefix = parse_arguments(sys.argv[1:])
+        construct_gfa(inVCF, inFA, outGFA, outPrefix)
