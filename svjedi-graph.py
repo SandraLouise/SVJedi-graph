@@ -91,9 +91,18 @@ def main(svjg_dir, args):
     #### Map reads on graph
     print("Mapping reads on graph...")
 
+    # If multiple fastq
+    if "," in inFQ:
+        list_inFQ = inFQ.split(",")
+    else:
+        list_inFQ = [inFQ]
+
     outGAF = outPrefix + ".gaf"
-    c2 = "minigraph -x lr -t{} {} {} > {}".format(threads, outGFA, inFQ, outGAF)
-    proc2 = subprocess.run(c2, shell=True)
+    subprocess.run(f"touch {outGAF}", shell=True)
+
+    for inFQ in list_inFQ:
+        c2 = "minigraph -x lr -t{} {} {} >> {}".format(threads, outGFA, inFQ, outGAF)
+        proc2 = subprocess.run(c2, shell=True)
 
     if proc2.returncode == 1:
         sys.exit("Failed to map the reads on the graph.\nExiting SVJedi-graph.")
