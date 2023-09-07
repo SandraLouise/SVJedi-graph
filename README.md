@@ -46,7 +46,8 @@ For all variants, the `SVTYPE` tag must be present in the `INFO` field (`SVTYPE=
 To check that SVJedi-graph behaves as expected on your device, you can run:
 
 ```bash
-./test-dir/run_test.sh
+cd test-dir/
+./run_test.sh
 ``` 
 
 To explore the output files on a small dataset, run:
