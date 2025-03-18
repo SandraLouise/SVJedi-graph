@@ -131,7 +131,7 @@ def decision_vcf(dictReadAtJunction, inputVCF, outputDecision, minNbAln, e, miss
                 #=========================================================
                 # 2. Get END
                 #=========================================================
-                if svtype != "BND":
+                if svtype != "BND" and svtype != "INS":
                     end = get_info(in_info, "END")
 
                 #=========================================================
