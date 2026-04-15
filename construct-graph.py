@@ -105,8 +105,6 @@ def construct_gfa(inVCF, inFA, outGFA, outPrefix):
         dict_ins_seq = {}
         d_ins_multiplicity = {}
 
-        d_sv_alt = {}
-        #d = {sv_id : [ref_seq, alt_seq]}
 
         for line in file:
             if line.startswith('#'):
@@ -401,102 +399,67 @@ def construct_gfa(inVCF, inFA, outGFA, outPrefix):
 
             if sv_type == "DEL":
 
-                #--------------------------------------------------------------------------
-                # Part to remove
-                if sv_id in d_sv_alt.keys():
-
-                    #alternative node
-                    alt_node = format_node_id(chrom, pos-1, "a")
-                    graph_file.write(format_gfa_node(alt_node, d_sv_alt[sv_id]))
-
-                    #alternative links
-                    for node in all_nodes[chrom]:
-                        coords = node.split(":")[1]
-                        if any([coords.endswith(str(pos-1)), coords.endswith(str(pos))]):
-                            left_node = node
-                        elif coords.startswith(str(end)):
-                            right_node = node
-                    graph_file.write(format_gfa_link_pp(left_node, alt_node, 1))
-                    graph_file.write(format_gfa_link_pp(alt_node, right_node, 1))
-                #--------------------------------------------------------------------------
-
-                else:
-
-                    for node in all_nodes[chrom]:
-                        coords = node.split(":")[1]
-                        # if coords.endswith(str(pos)) or coords.endswith(str(pos-1)):
-                        if coords.endswith(str(pos)):
-                            left_node = node
-                        elif coords.startswith(str(end+1)):
-                            right_node = node
+                #identify left and right nodes
+                left_node, right_node = None, None
+                pos_str = str(pos)
+                end_plus1_str = str(end+1)
+                for node in all_nodes[chrom]:
+                    start, stop = node.split(":")[1].split("-")
+                    if stop == pos_str:
+                        left_node = node
+                    elif start == end_plus1_str:
+                        right_node = node
+                    if left_node is not None and right_node is not None:
+                    	break
                     
-                    # Create alternative link and add to graph (gfa)
-                    graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
+                # Create alternative link and add to graph (gfa)
+                graph_file.write(format_gfa_link_pp(left_node, right_node, 1))
 
-                    # Associate alternative link to sv_id (DEL)
-                    link_id = (left_node, "+", right_node, "+")
+                # Associate alternative link to sv_id (DEL)
+                link_id = (left_node, "+", right_node, "+")
+
+                link_key = get_link_key(link_id)
+
+                if link_key not in d_link_sv.keys():
+                    d_link_sv[link_key] = []
+                    
+                d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
+            
+            elif sv_type == "INS":
+
+                # Coordinates of ins sequence end with "a" (for alternative)
+                ins_node = format_altnode_id(chrom, pos+1, ins_count)
+                graph_file.write(format_gfa_node(ins_node, dict_ins_seq[sv_id]))
+
+                #identify left and right nodes
+                left_node, right_node = None, None
+                pos_str = str(pos)
+                pos_plus1_str = str(pos+1)
+                for node in all_nodes[chrom]:
+                    start, stop = node.split(":")[1].split("-")
+                    if stop == pos_str:
+                        left_node = node
+                    elif start == pos_plus1_str:
+                        right_node = node
+                    if left_node is not None and right_node is not None:
+                    	break
+
+                # Create alternative links and add to graph (gfa)
+                graph_file.write(format_gfa_link_pp(left_node, ins_node, 1))
+                graph_file.write(format_gfa_link_pp(ins_node, right_node, 1))
+
+                # Associate alternative links to sv_id (INS)
+                link_id_1 = (left_node, "+", ins_node, "+")
+                link_id_2 = (ins_node, "+", right_node, "+")
+
+                for link_id in [link_id_1, link_id_2]:
 
                     link_key = get_link_key(link_id)
 
                     if link_key not in d_link_sv.keys():
                         d_link_sv[link_key] = []
-                    
-                    d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
-            
-            elif sv_type == "INS":
-
-                left_node, right_node = None, None
-
-                #--------------------------------------------------------------------------
-                # Part to remove
-                if sv_id in d_sv_alt.keys():
-                    # corr_pos = pos - 1
-                    ins_node = format_altnode_id(chrom, pos+1)
-                    graph_file.write(format_gfa_node(ins_node, d_sv_alt[sv_id]))
-
-                    for node in all_nodes[chrom]:
-                        coords = node.split(":")[1]
-                        if coords.endswith(str(pos)):
-                            left_node = node
-                        elif coords.startswith(str(pos+1)):
-                            right_node = node
-                    graph_file.write(format_gfa_link_pp(left_node, ins_node, 1))
-                    graph_file.write(format_gfa_link_pp(ins_node, right_node, 1))
-                #--------------------------------------------------------------------------
-
-                else:
-                    # Coordinates of ins sequence end with "a" (for alternative)
-                    ins_node = format_altnode_id(chrom, pos+1, ins_count)
-                    graph_file.write(format_gfa_node(ins_node, dict_ins_seq[sv_id]))
-
-                    for node in all_nodes[chrom]:
-                        coords = node.split(":")[1]
-                        # if any([coords.endswith(str(pos)), coords.endswith(str(pos-1))]):
-                        if coords.endswith(str(pos)):
-                            left_node = node
-                        # elif any([coords.startswith(str(pos+1)), coords.startswith(str(pos))]):
-                        elif coords.startswith(str(pos+1)):
-                            right_node = node
-
-                    # if any([left_node is None, right_node is None]):
-                        # print(sv, all_nodes[chrom])
-
-                    # Create alternative links and add to graph (gfa)
-                    graph_file.write(format_gfa_link_pp(left_node, ins_node, 1))
-                    graph_file.write(format_gfa_link_pp(ins_node, right_node, 1))
-
-                    # Associate alternative links to sv_id (INS)
-                    link_id_1 = (left_node, "+", ins_node, "+")
-                    link_id_2 = (ins_node, "+", right_node, "+")
-
-                    for link_id in [link_id_1, link_id_2]:
-
-                        link_key = get_link_key(link_id)
-
-                        if link_key not in d_link_sv.keys():
-                            d_link_sv[link_key] = []
                         
-                        d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
+                    d_link_sv[link_key].append((":".join([chrom, sv_id]), 1))
 
             elif sv_type == "INV":
 
